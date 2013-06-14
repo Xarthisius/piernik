@@ -45,7 +45,7 @@ module global
         &    dt, dt_initial, dt_max_grow, dt_min, dt_old, dtm, t, t_saved, nstep, nstep_saved, &
         &    integration_order, limiter, smalld, smallei, smallp, use_smalld, &
         &    relax_time, grace_period_passed, cfr_smooth, repeat_step, skip_sweep, geometry25D, &
-        &    dirty_debug, do_ascii_dump, show_n_dirtys, no_dirty_checks
+        &    dirty_debug, do_ascii_dump, show_n_dirtys, no_dirty_checks, use_fargo
 
    real, parameter :: dt_default_grow = 2.
    logical         :: cfl_violated             !< True when cfl condition is violated
@@ -80,9 +80,10 @@ module global
    character(len=cbuff_len)      :: cflcontrol        !< type of cfl control just before each sweep (possibilities: 'none', 'main', 'user')
    logical                       :: repeat_step       !< repeat fluid step if cfl condition is violated (significantly increases mem usage)
    logical, dimension(xdim:zdim) :: skip_sweep        !< allows to skip sweep in chosen direction
+   logical                       :: use_fargo         !< use Fast Eulerian Transport for differentially rotating disks
 
    namelist /NUMERICAL_SETUP/ cfl, cflcontrol, cfl_max, use_smalld, smalld, smallei, smallc, smallp, dt_initial, dt_max_grow, dt_min, &
-        &                     repeat_step, limiter, relax_time, integration_order, cfr_smooth, skip_sweep, geometry25D
+        &                     repeat_step, limiter, relax_time, integration_order, cfr_smooth, skip_sweep, geometry25D, use_fargo
 
 contains
 
@@ -150,6 +151,7 @@ contains
       dt_min      = tiny(1.)
       relax_time  = 0.
       integration_order  = 2
+      use_fargo   = .false.
 
       if (master) then
          diff_nml(NUMERICAL_SETUP)
@@ -186,6 +188,7 @@ contains
          lbuff(2)   = repeat_step
          lbuff(3:5) = skip_sweep
          lbuff(6)   = geometry25D
+         lbuff(7)   = use_fargo
 
       endif
 
@@ -200,6 +203,7 @@ contains
          repeat_step   = lbuff(2)
          skip_sweep    = lbuff(3:5)
          geometry25D   = lbuff(6)
+         use_fargo     = lbuff(7)
 
          smalld      = rbuff( 1)
          smallc      = rbuff( 2)
