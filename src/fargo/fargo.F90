@@ -39,4 +39,23 @@ module fargo
 ! pulled by ANY
    implicit none
    private
+   public :: init_fargo
+
+contains
+
+   subroutine init_fargo
+
+      use constants,    only: GEO_RPZ
+      use dataio_pub,   only: die
+      use domain,       only: dom
+      use global,       only: use_fargo
+
+      implicit none
+
+      if (.not. use_fargo) return
+
+      if (dom%geometry_type /= GEO_RPZ) call die("[fargo:init_fargo] FARGO works only for cylindrical geometry")
+
+   end subroutine init_fargo
+
 end module fargo
