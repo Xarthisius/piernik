@@ -29,9 +29,33 @@
 #include "macros.h"
 !>
 !! Implementation of a fast eulerian transport algorithm for differentially rotating disks (Masset 2000)
+!!
+!! See also:
+!!   1. Masset, F. "FARGO: A fast eulerian transport algorithm for differentially rotating disks" (2000) A&A, 141:165-173, arXiv:astro-ph/9910390
+!!   2. Kley, W., Bitsch, B., Klahr, H. "Planet migration in three-dimensional radiative discs" (2009) A&A, 506:971-987, arXiv:0908.1863
+!!
 !<
 module fargo
 ! pulled by ANY
    implicit none
    private
+   public :: init_fargo
+
+contains
+
+   subroutine init_fargo
+
+      use constants,    only: GEO_RPZ
+      use dataio_pub,   only: die
+      use domain,       only: dom
+      use global,       only: use_fargo
+
+      implicit none
+
+      if (.not. use_fargo) return
+
+      if (dom%geometry_type /= GEO_RPZ) call die("[fargo:init_fargo] FARGO works only for cylindrical geometry")
+
+   end subroutine init_fargo
+
 end module fargo
