@@ -1,2 +1,4 @@
 obj/
 runs/
+.lastsetup
+*.pyc
