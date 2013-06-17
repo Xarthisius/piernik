@@ -2,5 +2,5 @@ obj*/
 runs/
 *~
 .lastsetup
-python/DirWalk.pyc
+*.pyc
 .setuprc
