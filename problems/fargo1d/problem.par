@@ -1,0 +1,61 @@
+ $BASE_DOMAIN
+    n_d = 1, 200, 1
+    bnd_xl = 'ref'
+    bnd_xr = 'ref'
+    bnd_yl = 'per'
+    bnd_yr = 'per'
+    bnd_zl = 'per'
+    bnd_zr = 'per'
+    geometry = "cylindrical"
+    xmin   =  5.
+    xmax   =  5.
+    ymin   =  0.0
+    ymax   =  6.29 ! will be set to 2pi in code
+    zmin   = -1.
+    zmax   =  1.
+ /
+
+ $MPI_BLOCKS
+ /
+
+ $UNITS
+    units_set = "cgs"
+ /
+
+ $RESTART_CONTROL
+ /
+
+ $END_CONTROL
+    tend   = 220.0
+ /
+
+ $OUTPUT_CONTROL
+    problem_name ='moving_pulse'
+    run_id =  'ts1'
+    dt_hdf  = 11.0
+    dt_res  = 0.0
+    dt_log  = 0.001
+    dt_tsl  = 0.001
+    vars(1:) = 'ener', 'dens', 'velx', 'vely', 'velz'
+ /
+
+ $FLUID_NEUTRAL
+    cs_iso = 0.04
+ /
+
+ $NUMERICAL_SETUP
+    cfl    = 0.7
+    limiter= 'vanleer'
+ /
+
+ $PROBLEM_CONTROL
+    sigma0 = 6e-4
+    pulse_amp  = 1e-2
+    pulse_vel  = 0.0, 0.0, 0.0
+ /
+
+ $INTERACTIONS
+ /
+
+ $AMR
+ /
