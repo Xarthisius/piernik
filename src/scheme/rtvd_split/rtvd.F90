@@ -236,7 +236,7 @@ contains
 ! OPT: we may also try to work on bigger parts of the u(:,:,:,:) at a time , but the exact amount may depend on size of the L2 cache
 ! OPT: try an explicit loop over n to see if better pipelining can be achieved
 
-   subroutine relaxing_tvd(n, u, u0, bb, divv, cs_iso2, istep, sweep, i1, i2, dx, dt, cg, eflx)
+   subroutine relaxing_tvd(n, u, u0, bb, divv, cs_iso2, istep, sweep, i1, i2, dx, dt, cg, eflx, sources)
 
       use constants,        only: one, zero, half, GEO_XYZ, GEO_RPZ, LO, xdim, ydim, zdim
       use dataio_pub,       only: msg, die
@@ -292,6 +292,7 @@ contains
       real,                          intent(in)    :: dt                 !< time step
       type(grid_container), pointer, intent(in)    :: cg                 !< current grid piece
       type(ext_fluxes),              intent(inout) :: eflx               !< external fluxes
+      logical,                       intent(in)    :: sources            !< apply source terms
 
 #ifdef GRAV
       integer                                      :: ind                !< fluid index
@@ -460,6 +461,7 @@ contains
       endif
 
 ! Source terms -------------------------------------
+      if (sources) then
 
       geosrc = geometry_source_terms(u, pressure, sweep, cg)  ! n safe
 
@@ -513,6 +515,8 @@ contains
       u1(iarr_crn,:) = u1(iarr_crn,:) +  rk2coef(integration_order, istep)*srccrn(:,:)*dt
 #endif /* COSM_RAYS_SOURCES */
 #endif /* COSM_RAYS && IONIZED */
+
+      endif ! sources
 
       do ifl = 1, flind%fluids
          pfl => flind%all_fluids(ifl)%fl

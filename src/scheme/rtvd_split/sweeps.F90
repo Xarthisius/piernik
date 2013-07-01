@@ -245,11 +245,11 @@ contains
       use all_boundaries,   only: all_fluid_boundaries
       use cg_leaves,        only: leaves
       use cg_list,          only: cg_list_element
-      use constants,        only: pdims, LO, HI, uh_n, cs_i2_n, ORTHO1, ORTHO2
+      use constants,        only: pdims, LO, HI, uh_n, cs_i2_n, ORTHO1, ORTHO2, ydim
       use domain,           only: dom
       use fluidindex,       only: flind, iarr_all_swp, nmag
       use fluxtypes,        only: ext_fluxes
-      use global,           only: dt, integration_order, sweeps_mgu
+      use global,           only: dt, integration_order, sweeps_mgu, use_fargo
       use grid_cont,        only: grid_container
       use gridgeometry,     only: set_geo_coeffs
       use mpisetup,         only: mpi_err, req, status
@@ -297,6 +297,10 @@ contains
 
       call eflx%init
 
+      if (use_fargo .and. cdim == ydim) then
+         ! calculate mean vel and cres vel
+         ! substract mean vel from velphi
+      endif
       nr = 0
       do istep = 1, integration_order
          nr_recv = compute_nr_recv(cdim)
@@ -360,7 +364,7 @@ contains
                            u0(iarr_all_swp(cdim,:),:) = pu0(:,:)
 
                            call cg%set_fluxpointers(cdim, i1, i2, eflx)
-                           call relaxing_tvd(cg%n_(cdim), u, u0, b, div_v1d, cs2, istep, cdim, i1, i2, cg%dl(cdim), dt, cg, eflx)
+                           call relaxing_tvd(cg%n_(cdim), u, u0, b, div_v1d, cs2, istep, cdim, i1, i2, cg%dl(cdim), dt, cg, eflx, .true.)
                            call cg%save_outfluxes(cdim, i1, i2, eflx)
 
                            pu(:,:) = u(iarr_all_swp(cdim,:),:)
@@ -412,7 +416,13 @@ contains
                endif
             endif
          endif
-      enddo
+      enddo  ! istep
+
+      if (use_fargo .and. cdim == ydim) then
+         ! store new velphi
+         ! advect with cres vel
+         ! shift nint
+      endif
 
       if (allocated(b))  deallocate(b)
       if (allocated(u))  deallocate(u)
