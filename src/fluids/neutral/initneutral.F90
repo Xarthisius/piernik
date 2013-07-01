@@ -212,7 +212,7 @@ contains
 !<
 !*/
 #define RNG 2:nm
-   subroutine flux_neu(this, flux, cfr, uu, n, vx, ps, bb, cs_iso2)
+   subroutine flux_neu(this, flux, cfr, uu, n, vx, ps, bb, cs_iso2, use_vx)
 
       use constants,    only: idn, imx, imy, imz
       use func,         only: ekin
@@ -238,6 +238,7 @@ contains
       real, dimension(:),   intent(inout), pointer :: ps        !< pressure of neutral fluid for current sweep
       real, dimension(:,:), intent(in),    pointer :: bb        !< magnetic field x,y,z-components table
       real, dimension(:),   intent(in),    pointer :: cs_iso2   !< isothermal sound speed squared
+      logical,              intent(in)             :: use_vx    !< use provided  vx instead of computing it
 
       ! locals
       integer            :: nm
@@ -249,7 +250,9 @@ contains
 #endif /* LOCAL_FR_SPEED */
 
       nm = n-1
-      vx(RNG) = uu(imx,RNG)/uu(idn,RNG) ; vx(1) = vx(2); vx(n) = vx(nm)
+      if (.not. use_vx) then
+         vx(RNG) = uu(imx,RNG)/uu(idn,RNG) ; vx(1) = vx(2); vx(n) = vx(nm)
+      endif
 #ifdef ISO
       ps(RNG) = cs_iso2(RNG) * uu(idn,RNG) ; ps(1) = ps(2); ps(n) = ps(nm)
 #else /* !ISO */
@@ -257,7 +260,11 @@ contains
       ps(RNG) = max(ps(RNG), smallp)
 #endif /* !ISO */
 
-      flux(idn,RNG)=uu(imx,RNG)
+      if (use_vx) then
+         flux(idn,RNG) = uu(idn, RNG) * vx(RNG)
+      else
+         flux(idn,RNG) = uu(imx, RNG)
+      endif
       flux(imx,RNG)=uu(imx,RNG)*vx(RNG)+ps(RNG)
       flux(imy,RNG)=uu(imy,RNG)*vx(RNG)
       flux(imz,RNG)=uu(imz,RNG)*vx(RNG)

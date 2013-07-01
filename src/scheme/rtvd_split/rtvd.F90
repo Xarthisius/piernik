@@ -236,7 +236,7 @@ contains
 ! OPT: we may also try to work on bigger parts of the u(:,:,:,:) at a time , but the exact amount may depend on size of the L2 cache
 ! OPT: try an explicit loop over n to see if better pipelining can be achieved
 
-   subroutine relaxing_tvd(n, u, u0, bb, divv, cs_iso2, istep, sweep, i1, i2, dx, dt, cg, eflx, sources)
+   subroutine relaxing_tvd(n, u, u0, bb, divv, cs_iso2, istep, sweep, i1, i2, dx, dt, cg, eflx, sources, cr_vel)
 
       use constants,        only: one, zero, half, GEO_XYZ, GEO_RPZ, LO, xdim, ydim, zdim
       use dataio_pub,       only: msg, die
@@ -293,6 +293,7 @@ contains
       type(grid_container), pointer, intent(in)    :: cg                 !< current grid piece
       type(ext_fluxes),              intent(inout) :: eflx               !< external fluxes
       logical,                       intent(in)    :: sources            !< apply source terms
+      real, dimension(flind%fluids,n), intent(in), optional  :: cr_vel   !< advection velocity
 
 #ifdef GRAV
       integer                                      :: ind                !< fluid index
@@ -343,6 +344,7 @@ contains
 
       u1 = u
 
+      if (present(cr_vel)) vel_sweep = cr_vel
       vx   => vel_sweep
       dens => density
 
@@ -350,7 +352,7 @@ contains
 
       if (full_dim) then
          ! Fluxes calculation for cells centers
-         call all_fluxes(n, w, cfr, u1, bb, pressure, vel_sweep, cs_iso2)
+         call all_fluxes(n, w, cfr, u1, bb, pressure, vel_sweep, cs_iso2, present(cr_vel))
          ! Right and left fluxes decoupling
 
          ! original code

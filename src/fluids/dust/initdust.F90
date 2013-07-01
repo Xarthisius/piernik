@@ -170,7 +170,7 @@ contains
 !!
 !<
 !*/
-   subroutine flux_dust(this, flux, cfr, uu, n, vx, ps, bb, cs_iso2)
+   subroutine flux_dust(this, flux, cfr, uu, n, vx, ps, bb, cs_iso2, use_vx)
 
       use constants, only: idn, imx, imy, imz
 #ifdef GLOBAL_FR_SPEED
@@ -187,6 +187,7 @@ contains
       real, dimension(:),   intent(inout), pointer :: ps        !< pressure of dust fluid for current sweep
       real, dimension(:,:), intent(in),    pointer :: bb        !< magnetic field x,y,z-components table
       real, dimension(:),   intent(in),    pointer :: cs_iso2   !< local isothermal sound speed squared (optional)
+      logical,              intent(in)             :: use_vx    !< use provided  vx instead of computing it
 
       ! locals
 !      real               :: minvx, maxvx, amp
@@ -198,9 +199,15 @@ contains
       nm = n-1
 
       ps(:)  = 0.0
-      vx(RNG)=uu(imx,RNG)/uu(idn,RNG) ; vx(1) = vx(2); vx(n) = vx(nm)
+      if (.not. use_vx) then
+         vx(RNG)=uu(imx,RNG)/uu(idn,RNG) ; vx(1) = vx(2); vx(n) = vx(nm)
+      endif
 
-      flux(idn,RNG)=uu(imx,RNG)
+      if (use_vx) then
+         flux(idn,RNG) = uu(idn, RNG) * vx(RNG)
+      else
+         flux(idn,RNG) = uu(imx,RNG)
+      endif
       flux(imx,RNG)=uu(imx,RNG)*vx(RNG)
       flux(imy,RNG)=uu(imy,RNG)*vx(RNG)
       flux(imz,RNG)=uu(imz,RNG)*vx(RNG)

@@ -74,7 +74,7 @@ contains
 !! \param pp
 !<
 
-   subroutine all_fluxes(n, flux, cfr, uu, bb, pp, vx, cs_iso2)
+   subroutine all_fluxes(n, flux, cfr, uu, bb, pp, vx, cs_iso2, use_vx)
       use fluidtypes,     only: component_fluid
 #ifdef COSM_RAYS
       use fluxcosmicrays, only: flux_crs
@@ -87,14 +87,15 @@ contains
 
       implicit none
 
-      integer(kind=4), intent(in)                           :: n        !< size of input arrays
-      real, dimension(flind%all,n),    target,  intent(out) :: flux     !< array storing all fluxes
-      real, dimension(flind%all,n),    target,  intent(out) :: cfr      !< array storing all freezing speeds
-      real, dimension(flind%all,n),    target,  intent(out) :: uu       !< array with current fluid state
-      real, dimension(nmag,n),         target,  intent(in)  :: bb       !< array with current magnetic field state
-      real, dimension(flind%fluids,n), target,  intent(out) :: vx       !< array storing velocity in current sweep direction (reused later)
-      real, dimension(flind%fluids,n), target,  intent(out) :: pp       !< array storing pressure in current sweep (reused later)
-      real, dimension(:),              pointer, intent(in)  :: cs_iso2  !< array with current sound speed squared
+      integer(kind=4), intent(in)                             :: n        !< size of input arrays
+      real, dimension(flind%all,n),    target,  intent(out)   :: flux     !< array storing all fluxes
+      real, dimension(flind%all,n),    target,  intent(out)   :: cfr      !< array storing all freezing speeds
+      real, dimension(flind%all,n),    target,  intent(out)   :: uu       !< array with current fluid state
+      real, dimension(nmag,n),         target,  intent(in)    :: bb       !< array with current magnetic field state
+      real, dimension(flind%fluids,n), target,  intent(inout) :: vx       !< array storing velocity in current sweep direction (reused later)
+      real, dimension(flind%fluids,n), target,  intent(out)   :: pp       !< array storing pressure in current sweep (reused later)
+      real, dimension(:),              pointer, intent(in)    :: cs_iso2  !< array with current sound speed squared
+      logical,                                  intent(in)    :: use_vx   !< use provided advection velocity instead of computing it
 
       real, dimension(:,:),            pointer              :: pflux, pcfr, puu, pbb
       real, dimension(:),              pointer              :: pvx, ppp
@@ -118,7 +119,7 @@ contains
          pvx   =>   vx(pfl%pos,:)
          ppp   =>   pp(pfl%pos,:)
 
-         call pfl%compute_flux(pflux, pcfr, puu, n, pvx, ppp, pbb, cs_iso2)
+         call pfl%compute_flux(pflux, pcfr, puu, n, pvx, ppp, pbb, cs_iso2, use_vx)
       enddo
 
 #ifdef COSM_RAYS
@@ -126,7 +127,7 @@ contains
       pflux => flux(flind%crs%beg:flind%crs%end,:)
       pvx   => vx(flind%ion%pos,:)
 
-      call flux_crs(pflux,pvx,puu,n)
+      call flux_crs(pflux, pvx, puu, n)
 
       cfr(flind%crs%beg:flind%crs%end,:)  = spread(cfr(flind%ion%iarr(1),:),1,flind%crs%all)
 #endif /* COSM_RAYS */
