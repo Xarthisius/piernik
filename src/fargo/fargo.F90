@@ -43,7 +43,7 @@ module fargo
    integer, dimension(:, :),     allocatable :: nshift
 
    private
-   public :: init_fargo, vphi_mean, vphi_cr, nshift, subtract_mean
+   public :: init_fargo, vphi_mean, vphi_cr, nshift, subtract_mean, timestep_fargo
 
 contains
 
@@ -101,7 +101,7 @@ contains
          do i = cg%lhn(xdim, LO), cg%lhn(xdim, HI)
             do ifl = 1, flind%fluids
                pfl => flind%all_fluids(ifl)%fl
-               cg%u(pfl%imy, i, :, :) = cg%u(pfl%imy, i, :, :) - vphi_mean(icg, i) * cg%u(pfl%idn, i, :, :) 
+               !cg%u(pfl%imy, i, :, :) = cg%u(pfl%imy, i, :, :) - vphi_mean(icg, i) * cg%u(pfl%idn, i, :, :) 
                vphi_cr(icg, ifl, :) = vphi_mean(icg, :) - nshift(icg, :) * (cg%x(:) * cg%dl(ydim)) / dt
             enddo
          enddo
@@ -110,5 +110,39 @@ contains
       enddo
 
    end subroutine subtract_mean
+   
+   real function timestep_fargo(cg) result(dt)
+
+      use fluidindex,   only: flind
+      use grid_cont,    only: grid_container
+      use global,       only: cfl
+      use constants,    only: ydim
+
+      implicit none
+      type(grid_container), pointer, intent(in) :: cg
+
+      real :: dt_shear
+      real :: vphi, vphip, dphi, dphip
+      integer :: i, j, k
+
+
+      dt_shear = huge(real(1.0,4))
+      do k = cg%ks, cg%ke
+         do j = cg%js, cg%je
+            do i = cg%is, cg%ie
+               if (cg%leafmap(i, j, k)) then
+                  vphi  = cg%u(flind%dst%imy, i, j, k) / cg%u(flind%dst%idn, i, j, k) - cg%u(flind%dst%imy, i-1, j, k) / cg%u(flind%dst%idn, i-1, j, k)
+                  vphi  = max(abs(vphi), 1e-8)
+                  vphip = cg%u(flind%dst%imy, i, j, k) / cg%u(flind%dst%idn, i, j, k) - cg%u(flind%dst%imy, i, j-1, K) / cg%u(flind%dst%idn, i, j-1, k)
+                  vphip = max(abs(vphip), 1e-8)
+                  dphi = cg%x(i) * cg%dl(ydim)
+                  dt_shear = min(dt_shear, 0.5*min(dphi / abs(vphi), dphi / abs(vphip)))
+               endif
+            enddo
+         enddo
+      enddo
+      dt = cfl * dt_shear
+
+   end function timestep_fargo
 
 end module fargo

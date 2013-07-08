@@ -301,7 +301,8 @@ contains
       !! \todo 4) remove hardcoded integers
       !<
       if (epstein_factor(flind%neu%pos) <= zero) return
-      drag(:) = dt*half / grain_dens_x_size * sqrt( cs_iso2(:) + abs( vx(1,:) - vx(2,:) )**2)
+!      drag(:) = dt*half / grain_dens_x_size * sqrt( cs_iso2(:) + abs( vx(1,:) - vx(2,:) )**2)
+      drag(:) = dt*half / grain_dens_x_size * sqrt( cs_iso2(:) ) 
 
       delta(:) = one + drag(:) * (u1(iarr_all_dn(1),:) + u1(iarr_all_dn(2),:))
       delta(:) = one/delta(:)

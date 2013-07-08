@@ -229,7 +229,7 @@ contains
          do i = cg%is, cg%ie
             do k = cg%ks, cg%ke
                cg%u(flind%dst%imx,i,:,k) = cg%u(flind%dst%imx,i,:,k) + amp_noise*sin(kx*cg%x(i) + kz*cg%z(k)) * cg%u(flind%dst%idn,i,:,k)
-               cg%u(flind%dst%imy,i,:,k) = cg%u(flind%dst%imy,i,:,k) + amp_noise*sin(kx*cg%x(i) + kz*cg%z(k)) * cg%u(flind%dst%idn,i,:,k)
+!               cg%u(flind%dst%imy,i,:,k) = cg%u(flind%dst%imy,i,:,k) + amp_noise*sin(kx*cg%x(i) + kz*cg%z(k)) * cg%u(flind%dst%idn,i,:,k)
                cg%u(flind%dst%imz,i,:,k) = cg%u(flind%dst%imz,i,:,k) + amp_noise*sin(kx*cg%x(i) + kz*cg%z(k)) * cg%u(flind%dst%idn,i,:,k)
             enddo
          enddo
@@ -279,7 +279,7 @@ contains
             & cg%lhn(ydim, LO):cg%lhn(ydim, HI), cg%lhn(zdim, LO):cg%lhn(zdim, HI)))
          call random_number(noise)
          cg%u(flind%dst%imx,:,:,:) = cg%u(flind%dst%imx,:,:,:) +amp_noise*(1.0-2.0*noise(xdim,:,:,:)) * cg%u(flind%dst%idn,:,:,:)
-         cg%u(flind%dst%imy,:,:,:) = cg%u(flind%dst%imy,:,:,:) +amp_noise*(1.0-2.0*noise(ydim,:,:,:)) * cg%u(flind%dst%idn,:,:,:)
+         !cg%u(flind%dst%imy,:,:,:) = cg%u(flind%dst%imy,:,:,:) +amp_noise*(1.0-2.0*noise(ydim,:,:,:)) * cg%u(flind%dst%idn,:,:,:)
          cg%u(flind%dst%imz,:,:,:) = cg%u(flind%dst%imz,:,:,:) +amp_noise*(1.0-2.0*noise(zdim,:,:,:)) * cg%u(flind%dst%idn,:,:,:)
          deallocate(noise)
 

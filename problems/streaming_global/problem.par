@@ -11,7 +11,7 @@
     xmin   = 2.0
     xmax   = 6.0
     ymin   = 0.0
-    ymax   = 6.2831853071795862 
+    ymax   = 0.5
     zmin   =-0.146484375
     zmax   = 0.146484375
  /
@@ -34,7 +34,7 @@
 
  $END_CONTROL
     tend   = 3000.0
-    nend   = 10000000
+    nend   = 1000
     wend   = 70.0
  /
 
@@ -44,7 +44,7 @@
     enable_compression = .false.
     problem_name ='kepler'
     run_id  =  'tst'
-    dt_hdf  = 2.0
+    dt_hdf  = 0.1
     dt_res  = 100.0
     dt_log  = 1.0e-4
     dt_tsl  = 1.0
@@ -64,12 +64,13 @@
     cfl    = 0.6
     use_smalld = .true.
     smalld = 5.e-7
-    relax_time = 10.0
+    !relax_time = 1.0
     integration_order = 2
     limiter= 'vanleer'
     cfr_smooth = 0.01
     geometry25D = .true.
     use_fargo = .true.
+    cflcontrol = 'none'
  /
 
  $GRAVITY
