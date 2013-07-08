@@ -38,8 +38,12 @@
 module fargo
 ! pulled by ANY
    implicit none
+   real,    dimension(:, :),     allocatable :: vphi_mean
+   real,    dimension(:, :, :),  allocatable :: vphi_cr
+   integer, dimension(:, :),     allocatable :: nshift
+
    private
-   public :: init_fargo
+   public :: init_fargo, vphi_mean, vphi_cr, nshift, subtract_mean
 
 contains
 
@@ -49,6 +53,7 @@ contains
       use dataio_pub,   only: die
       use domain,       only: dom
       use global,       only: use_fargo
+      use cg_leaves,    only: leaves
 
       implicit none
 
@@ -57,5 +62,53 @@ contains
       if (dom%geometry_type /= GEO_RPZ) call die("[fargo:init_fargo] FARGO works only for cylindrical geometry")
 
    end subroutine init_fargo
+
+   subroutine subtract_mean(dt)
+
+      use constants,        only: xdim, ydim, zdim, LO, HI
+      use cg_leaves,        only: leaves
+      use cg_list,          only: cg_list_element
+      use grid_cont,        only: grid_container
+      use fluidindex,       only: flind
+      use fluidtypes,       only: component_fluid
+      
+      implicit none
+
+      real, intent(in) :: dt
+
+      type(cg_list_element), pointer    :: cgl
+      type(grid_container),  pointer    :: cg
+      integer :: ifl, icg, i
+      class(component_fluid), pointer :: pfl
+
+      cgl => leaves%first
+      cg => cgl%cg
+      if (.not. allocated(vphi_mean)) allocate(vphi_mean(leaves%cnt, cg%lhn(xdim, LO):cg%lhn(xdim, HI)))
+      if (.not. allocated(vphi_cr)) allocate(vphi_cr(leaves%cnt, flind%fluids, cg%lhn(xdim, LO):cg%lhn(xdim, HI)))
+      if (.not. allocated(nshift)) allocate(nshift(leaves%cnt, cg%lhn(xdim, LO):cg%lhn(xdim, HI)))
+
+      icg = 1
+      do while (associated(cgl))
+         cg => cgl%cg
+         do i = cg%lhn(xdim, LO), cg%lhn(xdim, HI)
+            do ifl = 1, flind%fluids
+               pfl => flind%all_fluids(ifl)%fl
+               vphi_mean(icg, i) = vphi_mean(icg, i) + sum(cg%u(pfl%imy, i, :, :) / cg%u(pfl%idn, i, :, :)) 
+            enddo
+         enddo
+         vphi_mean(icg, :) = vphi_mean(icg, :) / (flind%fluids * cg%n_(ydim) * cg%n_(zdim))
+         nshift(icg, :) = nint(vphi_mean(icg, :) * dt / (cg%x(:) * cg%dl(ydim)))
+         do i = cg%lhn(xdim, LO), cg%lhn(xdim, HI)
+            do ifl = 1, flind%fluids
+               pfl => flind%all_fluids(ifl)%fl
+               cg%u(pfl%imy, i, :, :) = cg%u(pfl%imy, i, :, :) - vphi_mean(icg, i) * cg%u(pfl%idn, i, :, :) 
+               vphi_cr(icg, ifl, :) = vphi_mean(icg, :) - nshift(icg, :) * (cg%x(:) * cg%dl(ydim)) / dt
+            enddo
+         enddo
+         cgl => cgl%nxt
+         icg = icg + 1
+      enddo
+
+   end subroutine subtract_mean
 
 end module fargo

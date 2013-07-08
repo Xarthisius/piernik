@@ -442,9 +442,10 @@ contains
 
       use cg_leaves,    only: leaves
       use cg_list,      only: cg_list_element
-      use constants,    only: ndims, xdim, ydim, zdim, LO, HI, GEO_XYZ, pSUM !, GEO_RPZ
+      use constants,    only: ndims, xdim, ydim, zdim, LO, HI, GEO_XYZ, pSUM, zero !, GEO_RPZ
       use dataio_pub,   only: die
       use domain,       only: dom
+      use func,         only: operator(.isnotequal.)
       use grid_cont,    only: grid_container
       use mpisetup,     only: piernik_MPI_Allreduce
       use particle_pub, only: pset
@@ -509,7 +510,7 @@ contains
       CoM(imass:ndims) = lsum(imass:ndims)
       call piernik_MPI_Allreduce(CoM(imass:ndims), pSUM)
 
-      if (CoM(imass) /= 0.) then
+      if (CoM(imass) .isnotequal. zero) then
          CoM(xdim:zdim) = CoM(xdim:zdim) / CoM(imass)
       else
          call die("[multigridmultipole:find_img_CoM] Total mass == 0")
@@ -788,9 +789,10 @@ contains
 
       use cg_leaves,    only: leaves
       use cg_list,      only: cg_list_element
-      use constants,    only: xdim, ydim, zdim, GEO_XYZ, GEO_RPZ, LO, HI, pSUM, pMIN, pMAX
+      use constants,    only: xdim, ydim, zdim, GEO_XYZ, GEO_RPZ, LO, HI, pSUM, pMIN, pMAX, zero
       use dataio_pub,   only: die
       use domain,       only: dom
+      use func,         only: operator(.isnotequal.)
       use grid_cont,    only: grid_container
       use mpisetup,     only: piernik_MPI_Allreduce
       use particle_pub, only: pset
@@ -803,7 +805,8 @@ contains
       type(cg_list_element), pointer :: cgl
       type(grid_container), pointer :: cg
 
-      if (dom%geometry_type /= GEO_XYZ .and. any(CoM(xdim:zdim) /= 0.)) call die("[multigridmultipole:img_mass2moments] CoM not allowed for non-cartesian geometry")
+      if (dom%geometry_type /= GEO_XYZ .and. any(CoM(xdim:zdim) .isnotequal. zero)) &
+         & call die("[multigridmultipole:img_mass2moments] CoM not allowed for non-cartesian geometry")
 
       ! reset the multipole data
       Q(:, :, :) = 0.
@@ -885,6 +888,8 @@ contains
 !<
 
    subroutine point2moments(mass, x, y, z)
+      use constants,    only: zero
+      use func,         only: operator(.isnotequal.)
 
       implicit none
 
@@ -893,18 +898,21 @@ contains
       real, intent(in) :: y       !< y coordinate of the contributing point
       real, intent(in) :: z       !< z coordinate of the contributing point
 
-      real    :: sin_th, cos_th, del
+      real    :: sin_th, cos_th, del, del_1
       real    :: Ql, Ql1, Ql2
       integer :: l, m, ir, m2s, m2c
+      logical :: del_is_not_zero
 
       call geomfac4moments(mass, x, y, z, sin_th, cos_th, ir, del)
 
       if (.not. interp_pt2mom) del = 0.
+      del_is_not_zero = del .isnotequal. zero
+      del_1 = 1.0 - del
 
       ! monopole, the (0,0) moment; P_0 = 1.
-      Q(0, INSIDE,  ir)   = Q(0, INSIDE,  ir)   +  rn(0) * (1.-del)
-      Q(0, OUTSIDE, ir)   = Q(0, OUTSIDE, ir)   + irn(0) * (1.-del)
-      if (del /= 0.) then
+      Q(0, INSIDE,  ir)   = Q(0, INSIDE,  ir)   +  rn(0) * del_1
+      Q(0, OUTSIDE, ir)   = Q(0, OUTSIDE, ir)   + irn(0) * del_1
+      if (del .isnotequal. zero) then
          Q(0, INSIDE,  ir+1) = Q(0, INSIDE,  ir+1) +  rn(0) * del
          Q(0, OUTSIDE, ir+1) = Q(0, OUTSIDE, ir+1) + irn(0) * del
       endif
@@ -915,9 +923,9 @@ contains
       Ql1 = 1.
       do l = 1, lmax
          Ql = cos_th * k12(1, l, 0) * Ql1 - k12(2, l, 0) * Ql2
-         Q(l, INSIDE,  ir)   = Q(l, INSIDE,  ir)   +  rn(l) * Ql * (1.-del)
-         Q(l, OUTSIDE, ir)   = Q(l, OUTSIDE, ir)   + irn(l) * Ql * (1.-del)
-         if (del /= 0.) then
+         Q(l, INSIDE,  ir)   = Q(l, INSIDE,  ir)   +  rn(l) * Ql * del_1
+         Q(l, OUTSIDE, ir)   = Q(l, OUTSIDE, ir)   + irn(l) * Ql * del_1
+         if (del_is_not_zero) then
             Q(l, INSIDE,  ir+1) = Q(l, INSIDE,  ir+1) +  rn(l) * Ql * del
             Q(l, OUTSIDE, ir+1) = Q(l, OUTSIDE, ir+1) + irn(l) * Ql * del
          endif
@@ -934,11 +942,11 @@ contains
          ! Associated Legendre polynomial: P_m^m = (-1)^m (2m-1)!! (1-x^2)^{m/2}
          ! The (2m-1)!! factor is integrated in ofact(:) array, where it mostly cancels out, note that (2m-1)!! \simeq m! exp(m/sqrt(2)) so it grows pretty fast with m
          Ql1 = sin_th ** m
-         Q(m2s+m, INSIDE,  ir)   = Q(m2s+m, INSIDE,  ir)   +  rn(m) * Ql1 * sfac(m) * (1.-del)
-         Q(m2c+m, INSIDE,  ir)   = Q(m2c+m, INSIDE,  ir)   +  rn(m) * Ql1 * cfac(m) * (1.-del)
-         Q(m2s+m, OUTSIDE, ir)   = Q(m2s+m, OUTSIDE, ir)   + irn(m) * Ql1 * sfac(m) * (1.-del)
-         Q(m2c+m, OUTSIDE, ir)   = Q(m2c+m, OUTSIDE, ir)   + irn(m) * Ql1 * cfac(m) * (1.-del)
-         if (del /= 0.) then
+         Q(m2s+m, INSIDE,  ir)   = Q(m2s+m, INSIDE,  ir)   +  rn(m) * Ql1 * sfac(m) * del_1
+         Q(m2c+m, INSIDE,  ir)   = Q(m2c+m, INSIDE,  ir)   +  rn(m) * Ql1 * cfac(m) * del_1
+         Q(m2s+m, OUTSIDE, ir)   = Q(m2s+m, OUTSIDE, ir)   + irn(m) * Ql1 * sfac(m) * del_1
+         Q(m2c+m, OUTSIDE, ir)   = Q(m2c+m, OUTSIDE, ir)   + irn(m) * Ql1 * cfac(m) * del_1
+         if (del_is_not_zero) then
             Q(m2s+m, INSIDE,  ir+1) = Q(m2s+m, INSIDE,  ir+1) +  rn(m) * Ql1 * sfac(m) * del
             Q(m2c+m, INSIDE,  ir+1) = Q(m2c+m, INSIDE,  ir+1) +  rn(m) * Ql1 * cfac(m) * del
             Q(m2s+m, OUTSIDE, ir+1) = Q(m2s+m, OUTSIDE, ir+1) + irn(m) * Ql1 * sfac(m) * del
@@ -954,11 +962,11 @@ contains
          Ql2 = 0.
          do l = m + 1, lmax
             Ql = cos_th * k12(1, l, m) * Ql1 - k12(2, l, m) * Ql2
-            Q(m2s+l, INSIDE,  ir)   = Q(m2s+l, INSIDE,  ir)   +  rn(l) * Ql * sfac(m) * (1.-del)
-            Q(m2c+l, INSIDE,  ir)   = Q(m2c+l, INSIDE,  ir)   +  rn(l) * Ql * cfac(m) * (1.-del)
-            Q(m2s+l, OUTSIDE, ir)   = Q(m2s+l, OUTSIDE, ir)   + irn(l) * Ql * sfac(m) * (1.-del)
-            Q(m2c+l, OUTSIDE, ir)   = Q(m2c+l, OUTSIDE, ir)   + irn(l) * Ql * cfac(m) * (1.-del)
-            if (del /= 0.) then
+            Q(m2s+l, INSIDE,  ir)   = Q(m2s+l, INSIDE,  ir)   +  rn(l) * Ql * sfac(m) * del_1
+            Q(m2c+l, INSIDE,  ir)   = Q(m2c+l, INSIDE,  ir)   +  rn(l) * Ql * cfac(m) * del_1
+            Q(m2s+l, OUTSIDE, ir)   = Q(m2s+l, OUTSIDE, ir)   + irn(l) * Ql * sfac(m) * del_1
+            Q(m2c+l, OUTSIDE, ir)   = Q(m2c+l, OUTSIDE, ir)   + irn(l) * Ql * cfac(m) * del_1
+            if (del_is_not_zero) then
                Q(m2s+l, INSIDE,  ir+1) = Q(m2s+l, INSIDE,  ir+1) +  rn(l) * Ql * sfac(m) * del
                Q(m2c+l, INSIDE,  ir+1) = Q(m2c+l, INSIDE,  ir+1) +  rn(l) * Ql * cfac(m) * del
                Q(m2s+l, OUTSIDE, ir+1) = Q(m2s+l, OUTSIDE, ir+1) + irn(l) * Ql * sfac(m) * del

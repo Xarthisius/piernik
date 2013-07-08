@@ -40,7 +40,15 @@ module func
 
    private
    public :: ekin, emag, L2norm, sq_sum3, resample_gauss, piernik_fnum, f2c, c2f, f2c_o, c2f_o, &
-      & append_int_to_array
+      & append_int_to_array, operator(.isequal.), operator(.isnotequal.)
+
+   interface operator(.isequal.)
+      module procedure is_equal
+   end interface
+   
+   interface operator(.isnotequal.)
+      module procedure is_not_equal
+   end interface
 
 contains
 
@@ -257,5 +265,33 @@ contains
       arr(ubound(arr(:))) = i
 
    end subroutine append_int_to_array
+
+!> \brief check if two float are equal
+   logical elemental function is_equal(x, y) result(compare)
+     implicit none
+     real,              intent(in)  :: x
+     real,              intent(in)  :: y
+
+     compare = abs(x - y) < (spacing(max(abs(x),abs(y))))
+   end function is_equal
+   
+   logical elemental function is_not_equal(x, y) result(compare)
+     implicit none
+     real,              intent(in)  :: x
+     real,              intent(in)  :: y
+
+     compare = .not. (is_equal(x, y))
+   end function is_not_equal
+
+   logical pure function is_equal2(x, y, ulp) result(compare)
+     real,              intent(in)  :: x
+     real,              intent(in)  :: y
+     integer, optional, intent(in)  :: ulp  !<  Unit in the last place. Shouldn't be lesser than 0.5
+     real :: rel
+     rel = 1.0
+     
+     if (present(ulp)) rel = real(abs(ulp))
+     compare = abs(x - y) < (rel * spacing(max(abs(x),abs(y))))
+   end function is_equal2
 
 end module func

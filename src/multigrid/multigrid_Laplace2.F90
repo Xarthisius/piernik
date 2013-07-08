@@ -174,9 +174,10 @@ contains
       use cg_level_connected, only: cg_level_connected_T
       use cg_list,            only: cg_list_element
       use cg_list_dataop,     only: dirty_label
-      use constants,          only: xdim, ydim, zdim, ndims, GEO_XYZ, GEO_RPZ, BND_NEGREF, LO
+      use constants,          only: xdim, ydim, zdim, ndims, GEO_XYZ, GEO_RPZ, BND_NEGREF, LO, zero
       use dataio_pub,         only: die
       use domain,             only: dom
+      use func,               only: operator(.isnotequal.)
       use global,             only: dirty_debug
       use grid_cont,          only: grid_container
       use multigridvars,      only: multidim_code_3D, overrelax, set_relax_boundaries
@@ -234,7 +235,7 @@ contains
                cr  = cr * cg%dvol**2 * cg%x**2
 
                crx1 = 2. * cg%x(is:ie) * cg%idx ! cylindrical term coefficient. Factor 2. comes from the way we're differentiating
-               where (crx1 /= 0.) crx1 = 1./crx1
+               where (crx1 .isnotequal. zero) crx1 = 1./crx1
             endif
             call set_relax_boundaries(cg, soln, is, ie, js, je, ks, ke, b, .not. need_all_bnd_upd)
 

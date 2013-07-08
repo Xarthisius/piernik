@@ -80,10 +80,11 @@ contains
 
       use cg_list,       only: cg_list_element
       use cg_leaves,     only: cg_leaves_T
-      use constants,     only: ndims, xdim, ydim, zdim, BND_NEGREF, LO, HI, GEO_XYZ
+      use constants,     only: ndims, xdim, ydim, zdim, BND_NEGREF, LO, HI, GEO_XYZ, zero
       use dataio_pub,    only: die
       use domain,        only: dom
       use grid_cont,     only: grid_container
+      use func,          only: operator(.isnotequal.)
       use multigridvars, only: grav_bnd, bnd_givenval, multidim_code_3D
       use named_array,   only: p3
 
@@ -109,7 +110,7 @@ contains
       ! the contribution of outer potential is simulated by a single layer of cells with image of density and we don't want to operate on this structure with the Laplacian.
       ! This image density is supposed to be infinitesimally thin, which we obviously can't reproduce, so we modify the operator instead
       call cg_llst%leaf_arr3d_boundaries(soln, bnd_type=BND_NEGREF)
-      if (src_lapl /= 0.) call cg_llst%leaf_arr3d_boundaries(src, bnd_type=BND_NEGREF, nocorners=.true.)
+      if (src_lapl .isnotequal. zero) call cg_llst%leaf_arr3d_boundaries(src, bnd_type=BND_NEGREF, nocorners=.true.)
 
       idm = 0
       do i = xdim, zdim
@@ -179,11 +180,12 @@ contains
       use cg_level_connected, only: cg_level_connected_T
       use cg_list,            only: cg_list_element
       use cg_list_dataop,     only: dirty_label
-      use constants,          only: xdim, ydim, zdim, ndims, GEO_XYZ, BND_NEGREF
+      use constants,          only: xdim, ydim, zdim, ndims, GEO_XYZ, BND_NEGREF, zero
       use dataio_pub,         only: die
       use domain,             only: dom
       use global,             only: dirty_debug
       use grid_cont,          only: grid_container
+      use func,               only: operator(.isnotequal.)
       use multigridvars,      only: multidim_code_3D, set_relax_boundaries
       use named_array_list,   only: qna
 
@@ -228,7 +230,7 @@ contains
             Ly  = 0. ; if (dom%has_dir(ydim)) Ly = cg%idy2 - 2. * (Lxy + Lyz)
             Lz  = 0. ; if (dom%has_dir(zdim)) Lz = cg%idz2 - 2. * (Lxz + Lyz)
             L0  = 2. * (Lx + Ly + Lz) + 4. * (Lxy + Lxz + Lyz)
-            if (L0 /= 0.0) then
+            if (L0 .isnotequal. zero) then
                iL0 = 1. / L0
                Lx = Lx * iL0
                Ly = Ly * iL0

@@ -489,6 +489,7 @@ contains
       use constants,  only: LO, HI, half, one, zero, xdim, ydim, zdim, CENTER, LEFT, RIGHT, INV_CENTER
       use dataio_pub, only: die
       use domain,     only: dom
+      use func,       only: operator(.isnotequal.)
 
       implicit none
 
@@ -511,7 +512,7 @@ contains
          this%coord(LEFT,  d)%r(:) = this%coord(CENTER, d)%r(:) - half*this%dl(d)
          this%coord(RIGHT, d)%r(:) = this%coord(CENTER, d)%r(:) + half*this%dl(d)
 
-         where ( this%coord(CENTER, d)%r(:) /= zero )
+         where ( this%coord(CENTER, d)%r(:) .isnotequal. zero )
             this%coord(INV_CENTER, d)%r(:) = one/this%coord(CENTER, d)%r(:)
          elsewhere
             this%coord(INV_CENTER, d)%r(:) = zero
@@ -963,7 +964,7 @@ contains
       use constants,  only: xdim, ydim, zdim, LO, HI, I_ZERO, I_ONE, I_TWO, I_THREE, O_INJ, O_LIN, O_D2, O_D3, O_D4, O_D5, O_D6, O_I2, O_I3, O_I4
       use dataio_pub, only: die
       use domain,     only: dom
-      use func,       only: c2f
+      use func,       only: c2f, operator(.isnotequal.)
       use named_array_list, only: qna
 
       implicit none
@@ -1005,9 +1006,9 @@ contains
 
       ! this is just for optimization. Setting stencil_range = I_THREE should work correctly for all interpolations.
       stencil_range = I_ZERO
-      if (P_1 /= 0. .or. P1 /= 0.) stencil_range = I_ONE
-      if (P_2 /= 0. .or. P2 /= 0.) stencil_range = I_TWO
-      if (P_3 /= 0. .or. P3 /= 0.) stencil_range = I_THREE
+      if ((P_1 .isnotequal. 0.0) .or. (P1 .isnotequal. 0.0)) stencil_range = I_ONE
+      if ((P_2 .isnotequal. 0.0) .or. (P2 .isnotequal. 0.0)) stencil_range = I_TWO
+      if ((P_3 .isnotequal. 0.0) .or. (P3 .isnotequal. 0.0)) stencil_range = I_THREE
 
       where (dom%has_dir(:))
          D(:) = 1

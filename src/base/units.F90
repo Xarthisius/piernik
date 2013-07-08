@@ -173,6 +173,7 @@ contains
       use constants,  only: pi, fpi, small, PIERNIK_INIT_MPI
       use dataio_pub, only: warn, printinfo, msg, die, code_progress
       use mpisetup,   only: master
+      use func,       only: operator(.isequal.)
 
       implicit none
 
@@ -273,7 +274,7 @@ contains
 
          case ("USER", "user")
             if (master) call warn("[units:init_units] PIERNIK will use 'cm', 'sek', 'gram' defined in problem.par")
-            if (any([cm == small, sek == small, gram == small])) &
+            if (any([cm .isequal. small, sek .isequal. small, gram .isequal. small])) &
                call die("[units:init_units] units_set=='user', yet one of {'cm','sek','gram'} is not set in problem.par") ! Don't believe in coincidence
             to_stdout = .true.               ! Force output in case someone is not aware what he/she is doing
             if (trim(s_len_u)  == ' undefined') s_len_u   = ' [user unit]'

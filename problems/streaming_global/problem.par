@@ -1,5 +1,5 @@
  $BASE_DOMAIN
-    n_d = 65, 65, 65
+    n_d = 200, 100, 1
     nb  = 4
     bnd_xl = 'ref'
     bnd_xr = 'ref'
@@ -9,7 +9,7 @@
     bnd_zr = 'per'
     geometry = "cylindrical"
     xmin   = 2.0
-    xmax   = 12.0
+    xmax   = 6.0
     ymin   = 0.0
     ymax   = 6.2831853071795862 
     zmin   =-0.146484375
@@ -46,7 +46,7 @@
     run_id  =  'tst'
     dt_hdf  = 2.0
     dt_res  = 100.0
-    dt_log  = 1.0
+    dt_log  = 1.0e-4
     dt_tsl  = 1.0
     vars(1:) = 'dens', 'velx', 'vely', 'velz'
  /
@@ -57,7 +57,7 @@
  /
 
  $FLUID_DUST
-    selfgrav = .true.
+    selfgrav = .false.
  /
 
  $NUMERICAL_SETUP
@@ -69,6 +69,7 @@
     limiter= 'vanleer'
     cfr_smooth = 0.01
     geometry25D = .true.
+    use_fargo = .true.
  /
 
  $GRAVITY

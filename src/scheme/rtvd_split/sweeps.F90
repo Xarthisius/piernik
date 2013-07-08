@@ -245,9 +245,11 @@ contains
       use all_boundaries,   only: all_fluid_boundaries
       use cg_leaves,        only: leaves
       use cg_list,          only: cg_list_element
-      use constants,        only: pdims, LO, HI, uh_n, cs_i2_n, ORTHO1, ORTHO2, ydim
+      use constants,        only: pdims, LO, HI, uh_n, cs_i2_n, ORTHO1, ORTHO2, xdim, ydim, zdim
       use domain,           only: dom
+      use fargo,            only: subtract_mean, vphi_mean, vphi_cr, nshift
       use fluidindex,       only: flind, iarr_all_swp, nmag
+      use fluidtypes,       only: component_fluid
       use fluxtypes,        only: ext_fluxes
       use global,           only: dt, integration_order, sweeps_mgu, use_fargo
       use grid_cont,        only: grid_container
@@ -286,6 +288,9 @@ contains
       integer(kind=4), dimension(:, :), pointer :: mpistatus
       integer :: cn_
 
+      integer :: ifl, icg, i
+      class(component_fluid), pointer :: pfl
+
       cn_ = 0
       full_dim = dom%has_dir(cdim)
       uhi = wna%ind(uh_n)
@@ -298,9 +303,9 @@ contains
       call eflx%init
 
       if (use_fargo .and. cdim == ydim) then
-         ! calculate mean vel and cres vel
-         ! substract mean vel from velphi
+         call subtract_mean(dt)
       endif
+
       nr = 0
       do istep = 1, integration_order
          nr_recv = compute_nr_recv(cdim)
@@ -419,9 +424,85 @@ contains
       enddo  ! istep
 
       if (use_fargo .and. cdim == ydim) then
-         ! store new velphi
-         ! advect with cres vel
-         ! shift nint
+         cgl => leaves%first
+         icg = 1
+         cn_ = 0
+         do while (associated(cgl))
+
+         do istep = 1, integration_order
+            if (cn_ /= cg%n_(cdim)) then
+               if (allocated(b))  deallocate(b)
+               if (allocated(u))  deallocate(u)
+               if (allocated(u0)) deallocate(u0)
+            endif
+            if (.not. allocated(u)) allocate(b(nmag, cg%n_(cdim)), u(flind%all, cg%n_(cdim)), u0(flind%all, cg%n_(cdim)))
+            cn_ = cg%n_(cdim)
+
+            b(:,:) = 0.0
+            u(:,:) = 0.0
+
+            if (istep == 1) then
+#ifdef COSM_RAYS
+               call div_v(flind%ion%pos, cg)
+#endif /* COSM_RAYS */
+               cg%w(uhi)%arr = cg%u
+            endif
+
+            !> \todo OPT: use cg%leafmap to skip lines fully covered by finer grids
+            ! it should be also possible to compute only parts of lines that aren't covered by finer grids
+            cs2 => null()
+            do i2 = cg%ijkse(pdims(cdim, ORTHO2), LO), cg%ijkse(pdims(cdim, ORTHO2), HI)
+               do i1 = cg%ijkse(pdims(cdim, ORTHO1), LO), cg%ijkse(pdims(cdim, ORTHO1), HI)
+
+#ifdef MAGNETIC
+                  if (full_dim) then
+                     b(:,:) = interpolate_mag_field(cdim, cg, i1, i2)
+                  else
+                     pb => cg%w(wna%bi)%get_sweep(cdim, i1, i2)   ! BEWARE: is it correct for 2.5D ?
+                     b(iarr_mag_swp(cdim,:),:)  = pb(:,:)
+                  endif
+#endif /* MAGNETIC */
+
+                  call set_geo_coeffs(cdim, flind, i1, i2, cg)
+#ifdef COSM_RAYS
+                  call set_div_v1d(div_v1d, cdim, i1, i2, cg)
+#endif /* COSM_RAYS */
+
+                  pu                     => cg%w(wna%fi   )%get_sweep(cdim,i1,i2)
+                  pu0                    => cg%w(uhi      )%get_sweep(cdim,i1,i2)
+                  if (i_cs_iso2 > 0) cs2 => cg%q(i_cs_iso2)%get_sweep(cdim,i1,i2)
+
+                  u (iarr_all_swp(cdim,:),:) = pu (:,:)
+                  u0(iarr_all_swp(cdim,:),:) = pu0(:,:)
+
+                  !call cg%set_fluxpointers(cdim, i1, i2, eflx)
+                  call relaxing_tvd(cg%n_(cdim), u, u0, b, div_v1d, cs2, istep, cdim, i1, i2, cg%dl(cdim), &
+                                    dt, cg, eflx, .false., vphi_cr(icg, :, :))
+                  !call cg%save_outfluxes(cdim, i1, i2, eflx)
+
+                  pu(:,:) = u(iarr_all_swp(cdim,:),:)
+                  nullify(pu, pu0, cs2)
+               enddo
+            enddo
+            deallocate(b, u, u0)
+         enddo
+            ! shift nint
+            do i = cg%lhn(xdim, LO), cg%lhn(xdim, HI)
+               cg%u(:, i, :, :) = cshift(cg%u(:, i, :, :), nshift(icg, i), dim=2)
+               do ifl = 1, flind%fluids
+                  pfl => flind%all_fluids(ifl)%fl
+                  ! add vel_mean back
+                  cg%u(pfl%imy, i, :, :) = cg%u(pfl%imy, i, :, :) + vphi_mean(icg, i) * cg%u(pfl%idn, i, :, :) 
+               enddo
+            enddo
+            print *, maxval(nshift)
+
+            cgl => cgl%nxt
+            icg = icg + 1
+         enddo
+         if (allocated(vphi_mean)) deallocate(vphi_mean)
+         if (allocated(vphi_cr)) deallocate(vphi_cr)
+         if (allocated(nshift)) deallocate(nshift)
       endif
 
       if (allocated(b))  deallocate(b)

@@ -1,5 +1,5 @@
 /* choosing fluids */
-#define NEUTRAL
+#undef NEUTRAL
 #define DUST
 
 /* adiabatic or isothermal */
@@ -9,7 +9,7 @@
 #define LOCAL_FR_SPEED
 
 /* physics including */
-#define BALSARA
+#undef BALSARA
 
 /* gravity type choosing */
 #define GRAV
