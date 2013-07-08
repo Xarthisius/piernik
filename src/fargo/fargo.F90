@@ -38,9 +38,9 @@
 module fargo
 ! pulled by ANY
    implicit none
-   real,    dimension(:, :),     allocatable :: vphi_mean
+   real,    dimension(:, :, :),  allocatable :: vphi_mean
    real,    dimension(:, :, :),  allocatable :: vphi_cr
-   integer, dimension(:, :),     allocatable :: nshift
+   integer, dimension(:, :, :),  allocatable :: nshift
 
    private
    public :: init_fargo, vphi_mean, vphi_cr, nshift, subtract_mean, timestep_fargo
@@ -83,9 +83,9 @@ contains
 
       cgl => leaves%first
       cg => cgl%cg
-      if (.not. allocated(vphi_mean)) allocate(vphi_mean(leaves%cnt, cg%lhn(xdim, LO):cg%lhn(xdim, HI)))
+      if (.not. allocated(vphi_mean)) allocate(vphi_mean(leaves%cnt, flind%fluids, cg%lhn(xdim, LO):cg%lhn(xdim, HI)))
       if (.not. allocated(vphi_cr)) allocate(vphi_cr(leaves%cnt, flind%fluids, cg%lhn(xdim, LO):cg%lhn(xdim, HI)))
-      if (.not. allocated(nshift)) allocate(nshift(leaves%cnt, cg%lhn(xdim, LO):cg%lhn(xdim, HI)))
+      if (.not. allocated(nshift)) allocate(nshift(leaves%cnt, flind%fluids, cg%lhn(xdim, LO):cg%lhn(xdim, HI)))
 
       icg = 1
       do while (associated(cgl))
@@ -93,55 +93,90 @@ contains
          do i = cg%lhn(xdim, LO), cg%lhn(xdim, HI)
             do ifl = 1, flind%fluids
                pfl => flind%all_fluids(ifl)%fl
-               vphi_mean(icg, i) = vphi_mean(icg, i) + sum(cg%u(pfl%imy, i, :, :) / cg%u(pfl%idn, i, :, :)) 
+               vphi_mean(icg, ifl, i) = sum(cg%u(pfl%imy, i, :, :) / cg%u(pfl%idn, i, :, :))  / size(cg%u(pfl%idn, i, :, :))
             enddo
          enddo
-         vphi_mean(icg, :) = vphi_mean(icg, :) / (flind%fluids * cg%n_(ydim) * cg%n_(zdim))
-         nshift(icg, :) = nint(vphi_mean(icg, :) * dt / (cg%x(:) * cg%dl(ydim)))
-         do i = cg%lhn(xdim, LO), cg%lhn(xdim, HI)
-            do ifl = 1, flind%fluids
-               pfl => flind%all_fluids(ifl)%fl
-               !cg%u(pfl%imy, i, :, :) = cg%u(pfl%imy, i, :, :) - vphi_mean(icg, i) * cg%u(pfl%idn, i, :, :) 
-               vphi_cr(icg, ifl, :) = vphi_mean(icg, :) - nshift(icg, :) * (cg%x(:) * cg%dl(ydim)) / dt
-            enddo
+         !vphi_mean(icg, :) = vphi_mean(icg, :) / (flind%fluids * cg%n_(ydim) * cg%n_(zdim))
+         
+         !nshift(icg, :) = nint(vphi_mean(icg, :) * dt / (cg%x(:) * cg%dl(ydim)))
+         do ifl = 1, flind%fluids
+            pfl => flind%all_fluids(ifl)%fl
+            nshift(icg, ifl, :) = nint(vphi_mean(icg, ifl, :) * dt / (cg%x(:) * cg%dl(ydim)))
+            vphi_cr(icg, ifl, :) = vphi_mean(icg, ifl, :) - nshift(icg, ifl, :) * (cg%x(:) * cg%dl(ydim)) / dt
+!            if (ifl == 2) then
+!               print *, nshift(icg, ifl, 50:)
+!               print *, vphi_cr(icg, ifl, 1:10)
+!               print *, vphi_mean(icg, ifl, 1:10)
+!            endif
          enddo
+
+!         do i = cg%lhn(xdim, LO), cg%lhn(xdim, HI)
+!            do ifl = 1, flind%fluids
+!               pfl => flind%all_fluids(ifl)%fl
+!               !cg%u(pfl%imy, i, :, :) = cg%u(pfl%imy, i, :, :) - vphi_mean(icg, i) * cg%u(pfl%idn, i, :, :) 
+!            enddo
+!!         enddo
          cgl => cgl%nxt
          icg = icg + 1
       enddo
+!      stop
 
    end subroutine subtract_mean
    
-   real function timestep_fargo(cg) result(dt)
+   real function timestep_fargo(cg, dt_min) result(dt)
 
       use fluidindex,   only: flind
       use grid_cont,    only: grid_container
       use global,       only: cfl
       use constants,    only: ydim
+      use fluidtypes,       only: component_fluid
 
       implicit none
       type(grid_container), pointer, intent(in) :: cg
+      real, intent(in) :: dt_min
 
-      real :: dt_shear
+      real :: dt_shear, dt_res
+      real :: v_mean, v_cr, nshft, c_fl
       real :: vphi, vphip, dphi, dphip
-      integer :: i, j, k
+      integer :: i, j, k, ifl
+      class(component_fluid), pointer :: pfl
 
 
       dt_shear = huge(real(1.0,4))
-      do k = cg%ks, cg%ke
-         do j = cg%js, cg%je
-            do i = cg%is, cg%ie
-               if (cg%leafmap(i, j, k)) then
-                  vphi  = cg%u(flind%dst%imy, i, j, k) / cg%u(flind%dst%idn, i, j, k) - cg%u(flind%dst%imy, i-1, j, k) / cg%u(flind%dst%idn, i-1, j, k)
-                  vphi  = max(abs(vphi), 1e-8)
-                  vphip = cg%u(flind%dst%imy, i, j, k) / cg%u(flind%dst%idn, i, j, k) - cg%u(flind%dst%imy, i, j-1, K) / cg%u(flind%dst%idn, i, j-1, k)
-                  vphip = max(abs(vphip), 1e-8)
-                  dphi = cg%x(i) * cg%dl(ydim)
-                  dt_shear = min(dt_shear, 0.5*min(dphi / abs(vphi), dphi / abs(vphip)))
-               endif
+      do ifl = 1, flind%fluids
+         pfl   => flind%all_fluids(ifl)%fl
+         do k = cg%ks, cg%ke
+            do j = cg%js, cg%je
+               do i = cg%is, cg%ie
+                  if (cg%leafmap(i, j, k)) then
+                     vphi  = cg%u(pfl%imy, i, j, k) / cg%u(pfl%idn, i, j, k) - cg%u(pfl%imy, i-1, j, k) / cg%u(pfl%idn, i-1, j, k)
+                     vphi  = max(abs(vphi), 1e-8)
+                     vphip = cg%u(pfl%imy, i, j, k) / cg%u(pfl%idn, i, j, k) - cg%u(pfl%imy, i, j-1, K) / cg%u(pfl%idn, i, j-1, k)
+                     vphip = max(abs(vphip), 1e-8)
+                     dphi = cg%x(i) * cg%dl(ydim)
+                     dt_shear = min(dt_shear, 0.5*min(dphi / abs(vphi), dphi / abs(vphip)))
+                  endif
+               enddo
             enddo
          enddo
       enddo
       dt = cfl * dt_shear
+
+!     dt_res = huge(real(1.0,4))
+!     c_fl = 0.0
+!     do ifl = 1, flind%fluids
+!        pfl   => flind%all_fluids(ifl)%fl
+!        do i = cg%is, cg%ie
+!           dphi = cg%x(i) * cg%dl(ydim)
+!           v_mean = sum(cg%u(pfl%imy, i, :, :) / cg%u(pfl%idn, i, :, :)) / size(cg%u(pfl%idn, i, :, :))
+!           nshft = nint(v_mean * dt / dphi)
+!           v_cr = v_mean - nshft * dphi / dt
+!           c_fl = max(c_fl, abs(v_cr) + pfl%get_cs(i, cg%js, cg%ks, cg%u, cg%b, cg%cs_iso2))
+!           dt_res = min(dt_res, dphi / c_fl)
+!        enddo
+!     enddo
+!
+!     dt = min(dt, cfl * dt_res)
 
    end function timestep_fargo
 

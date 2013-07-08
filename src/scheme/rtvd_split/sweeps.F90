@@ -374,7 +374,7 @@ contains
                            u0(iarr_all_swp(cdim,:),:) = pu0(:,:)
                            if (use_fargo .and. cdim == ydim) then
                               do ifl = 1, flind%fluids
-                                 vx(ifl, :) = u(iarr_all_mx(ifl), :) / u(iarr_all_dn(ifl), :)  - vphi_mean(icg, i1)
+                                 vx(ifl, :) = u(iarr_all_mx(ifl), :) / u(iarr_all_dn(ifl), :)  - vphi_mean(icg, ifl, i2)
                               enddo
                            endif
 
@@ -506,7 +506,7 @@ contains
                            u0(iarr_all_swp(cdim,:),:) = pu0(:,:)
                            if (use_fargo .and. cdim == ydim) then
                               do ifl = 1, flind%fluids
-                                 vx(ifl,:) = vphi_cr(icg, ifl, i1)
+                                 vx(ifl,:) = vphi_cr(icg, ifl, i2)
                               enddo
                            endif
 
@@ -590,7 +590,10 @@ contains
 
             ! shift nint
             do i = cg%lhn(xdim, LO), cg%lhn(xdim, HI)
-               cg%u(:, i, :, :) = cshift(cg%u(:, i, :, :), nshift(icg, i), dim=2)
+               do ifl = 1, flind%fluids
+                  pfl   => flind%all_fluids(ifl)%fl
+                  cg%u(pfl%beg:pfl%end, i, :, :) = cshift(cg%u(pfl%beg:pfl%end, i, :, :), -nshift(icg, ifl, i), dim=2)
+               enddo
             enddo
             cgl => cgl%nxt
             icg = icg + 1

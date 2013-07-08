@@ -152,7 +152,6 @@ contains
             dt    = min(dt, dt_)
             c_all = max(c_all, c_)
          enddo
-         print *, 'after fluid', dt
 
 #ifdef COSM_RAYS
          call timestep_crs(cg)
@@ -167,10 +166,8 @@ contains
 #ifndef BALSARA
          dt = min(dt,timestep_interactions(cg))
 #endif /* BALSARA */
-         print *, 'after inter', dt
 
-         if (use_fargo) dt = min(dt, timestep_fargo(cg))
-         print *, 'after fargo', dt
+         if (use_fargo) dt = min(dt, timestep_fargo(cg, dt))
          cgl => cgl%nxt
       enddo
 
@@ -334,13 +331,17 @@ contains
       integer                :: i, j, k, d
 
       real, dimension(cg%is:cg%ie) :: vphi_mean
+      real :: vphi_cr
+      integer :: nshift
 
       c(:) = 0.0
       c_fl = 0.0
-               
-      do i = cg%is, cg%ie
-         vphi_mean(i) = sum(cg%u(fl%imy, i, :, :) / cg%u(fl%idn, i, :, :)) 
-      enddo
+     
+      if (use_fargo) then
+         do i = cg%is, cg%ie
+            vphi_mean(i) = sum(cg%u(fl%imy, i, :, :) / cg%u(fl%idn, i, :, :)) / size(cg%u(fl%idn, i, :, :))
+         enddo
+      endif
 
       do k = cg%ks, cg%ke
          do j = cg%js, cg%je
@@ -348,7 +349,8 @@ contains
                if (cg%leafmap(i, j, k)) then
                   if (cg%u(fl%idn,i,j,k) > 0.0) then
                      v(:) = abs(cg%u(fl%imx:fl%imz, i, j, k) / cg%u(fl%idn, i, j, k))
-                     if (use_fargo) v(ydim) = v(ydim) - vphi_mean(i)
+                     if (use_fargo) &
+                        & v(ydim) = abs(cg%u(fl%imy, i, j, k) / cg%u(fl%idn, i, j, k) - vphi_mean(i))
                   else
                      v(:) = 0.0
                   endif
