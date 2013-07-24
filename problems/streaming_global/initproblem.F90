@@ -57,6 +57,7 @@ module initproblem
    !<
    real                     :: dumping_coeff, amp_noise
    logical                  :: use_inner_orbital_period  !< use 1./T_inner as dumping_coeff
+   logical                  :: stratification            !< include vertical component of gravity
    integer(kind=4)          :: amp_func  !< 1 - random, 2 - sine
 
    integer(kind=4), parameter :: ngauss = 4
@@ -64,7 +65,7 @@ module initproblem
    character(len=dsetnamelen), parameter :: inid_n = "u_0"
 
    namelist /PROBLEM_CONTROL/  d0, r_in, r_out, f_in, f_out, dens_exp, eps, dumping_coeff, use_inner_orbital_period, &
-      & amp_noise, amp_func, gauss
+      & amp_noise, amp_func, gauss, stratification
 
 contains
 !-----------------------------------------------------------------------------------------------------------------------
@@ -129,6 +130,7 @@ contains
       dumping_coeff    = 1.0
 
       use_inner_orbital_period = .false.
+      stratification = .false.
 
       if (master) then
 
@@ -137,6 +139,7 @@ contains
          ibuff(1) = amp_func
 
          lbuff(1) = use_inner_orbital_period
+         lbuff(2) = stratification
 
          rbuff(1) = d0
          rbuff(2) = r_in
@@ -160,6 +163,7 @@ contains
          amp_func         = ibuff(1)
 
          use_inner_orbital_period = lbuff(1)
+         stratification   = lbuff(2)
 
          d0               = rbuff(1)
          r_in             = rbuff(2)
@@ -301,15 +305,16 @@ contains
       use fluidtypes,         only: component_fluid
       use gravity,            only: r_smooth, ptmass
       use grid_cont,          only: grid_container
+      use global,             only: smalld
       use mpisetup,           only: master, piernik_MPI_Allreduce
       use named_array_list,   only: wna
-      use units,              only: newtong, gram, cm, kboltz, mH
+      use units,              only: newtong, kboltz, mH, sek, km
 
       implicit none
 
       integer                         :: i, j, k, kmid, p
       real                            :: xi, yj, zk, rc, vz, sqr_gm, vr, vphi
-      real                            :: gprim, H2
+      real                            :: omega2, H2
 
       real, dimension(:), allocatable :: grav, dens_prof, ln_dens_der
       class(component_fluid), pointer :: fl
@@ -317,12 +322,19 @@ contains
       type(grid_container),   pointer :: cg
 
       integer :: xl, xr
+      real :: xxl, xxr
 
 !   Secondary parameters
       allocate(ln_dens_der(0)) ! suppress compiler warnings
       cgl => leaves%first
       do while (associated(cgl))
          cg => cgl%cg
+
+         do k = cg%lhn(zdim, LO), cg%lhn(zdim, HI)
+            do j = cg%lhn(ydim, LO), cg%lhn(ydim, HI)
+               cg%cs_iso2(:,j,k) = kboltz * mmsn_T(cg%x(:)) / (2.0*mH)
+            enddo
+         enddo
 
          if (is_multicg) call die("[initproblem:problem_initial_conditions] multiple grid pieces per procesor not implemented yet") !nontrivial kmid, allocate
 
@@ -332,22 +344,32 @@ contains
          enddo
 
          if (dom%geometry_type == GEO_RPZ) then
+            xxl = cg%x(cg%is)
+            xxr = cg%x(cg%ie)
             if (master) then
                call printinfo("------------------------------------------------------------------")
                call printinfo(" Assuming temperature profile for MMSN ")
                call printinfo(" T(R) = 150 ( R / 1 AU )^(-0.429) K")
-               write(msg,'(A,F5.1,A)') " T(xmin) = ", mmsn_T(dom%edge(xdim, LO))," K"
+               write(msg, '(A,F4.1,1X,F4.1)'), " R = ", xxl, xxr
                call printinfo(msg)
-               write(msg,'(A,F5.1,A)') " T(xmax) = ", mmsn_T(dom%edge(xdim, HI))," K"
+               write(msg, '(A,F5.1,1X,F5.1,A)') " T = ", mmsn_T(xxl), mmsn_T(xxr), " K"
                call printinfo(msg)
-               write(msg,'(A,F5.1,A)') " T_mean  = ", 0.5*(mmsn_T(dom%edge(xdim, LO))+mmsn_T(dom%edge(xdim, HI)))," K"
+               write(msg, '(A,F9.5,1X,F9.5,A)') " cs = ", sqrt(kboltz * mmsn_T(xxl) / (2*mH)), sqrt(kboltz * mmsn_T(xxr) / (2*mH)), " AU/yr"
+               call printinfo(msg)
+               write(msg, '(A,F9.5,1X,F9.5,A)') " cs = ", sqrt(kboltz * mmsn_T(xxl) / (2*mH)) / (km / sek), sqrt(kboltz * mmsn_T(xxr) / (2*mH)) / (km / sek), " km/s"
+               call printinfo(msg)
+               write(msg, '(A,F9.5,1X,F9.5,A)') " omega = ", sqrt(newtong * ptmass / xxl ** 3), sqrt(newtong * ptmass / xxr ** 3),  " yr^-1"
+               call printinfo(msg)
+               write(msg, '(A,E13.5,1X,E13.5,A)') " omega = ", sqrt(newtong * ptmass / xxl ** 3) * sek, sqrt(newtong * ptmass / xxr ** 3) * sek , " s^-1"
                call printinfo(msg)
                write(msg,'(A,F9.5)') " cs2(T_mean) = ", kboltz * 0.5*(mmsn_T(dom%edge(xdim, LO))+mmsn_T(dom%edge(xdim, HI))) / mH
                call printinfo(msg)
-               if (associated(flind%neu)) then
-                  write(msg,'(A,F12.3,A)') " T_real(cs2) = ", flind%neu%cs2*mH/kboltz, " K"
-                  call printinfo(msg)
-               endif
+               write(msg,'(" H = ",F9.5,1X,F9.5,A)') &
+                  sqrt(cg%cs_iso2(cg%is, 1, 1) * xxl ** 3 / (newtong * ptmass)), &
+                  sqrt(cg%cs_iso2(cg%ie, 1, 1) * xxr ** 3 / (newtong * ptmass)), " AU"
+               call printinfo(msg)
+               write(msg,'(" III Kepler Law gives T = ", F5.2, " yr at 1 AU")')  sqr_gm/dpi
+               call printinfo(msg)
                call printinfo("------------------------------------------------------------------")
             endif
 
@@ -359,48 +381,48 @@ contains
             if (.not.allocated(dens_prof)) allocate(dens_prof(xl:xr))
 
             grav = compute_gravaccelR(cg)
-            dens_prof(:) = d0 * cg%x(:)**(-dens_exp)  * gram / cm**2
-
-            !! \f$ v_\phi = \sqrt{R\left(c_s^2 \partial_R \ln\rho + \partial_R \Phi \right)} \f$
-            ln_dens_der  = log(dens_prof)
-            ln_dens_der(xl+1:xr)  = ( ln_dens_der(xl+1:xr) - ln_dens_der(xl:xr-1) ) / cg%dx
-            ln_dens_der(xl)       = ln_dens_der(xl+1)
-            T_inner               = dpi*cg%x(cg%is) / sqrt( abs(grav(cg%is)) * cg%x(cg%is) )
-            write(msg,*) "T_inner = ", T_inner
-            if (master) call printinfo(msg)
-            write(msg,*) "III Kepler Law gives T = ", sqr_gm/dpi , " yr at 1 AU"
-            if (master) call printinfo(msg)
 
             do p = 1, flind%fluids
                fl => flind%all_fluids(p)%fl
-               if (fl%tag /= DST .and. master) then
-                  write(msg,'(A,F9.5)') "[initproblem:initprob] cs2 used = ", fl%cs2
-                  call printinfo(msg)
+
+               if (.not.stratification) then
+                  do i = cg%lhn(xdim, LO), cg%lhn(xdim, HI)
+                     xi = cg%x(i)
+                     omega2 = newtong * ptmass / xi**3
+                     H2 = 2.0 * cg%cs_iso2(i,1,1) / omega2   ! assumes radial profile for cs
+                     dens_prof(i) = sum(mmsn_D(cg%x(i)) * exp( -cg%z(:)**2 / H2 )) / size(cg%z)
+                  enddo
+               else
+                  dens_prof(:) = mmsn_D(cg%x(:))
                endif
+               !! \f$ v_\phi = \sqrt{R\left(c_s^2 \partial_R \ln\rho + \partial_R \Phi \right)} \f$
+               ln_dens_der  = log(dens_prof)
+               ln_dens_der(xl+1:xr)  = ( ln_dens_der(xl+1:xr) - ln_dens_der(xl:xr-1) ) / cg%dx
+               ln_dens_der(xl)       = ln_dens_der(xl+1)
+               T_inner               = dpi*cg%x(cg%is) / sqrt( abs(grav(cg%is)) * cg%x(cg%is) )
 
                do j = cg%lhn(ydim, LO), cg%lhn(ydim, HI)
                   yj = cg%y(j)
                   do i = cg%lhn(xdim, LO), cg%lhn(xdim, HI)
                      xi = cg%x(i)
                      rc = xi + r_smooth
-
-                     gprim = newtong*ptmass / xi**3
-                     if (fl%cs > 0) then
-                        H2 = 2.0*fl%cs2/gprim
-                     else
-                        H2 = 1.0
-                     endif
-
+                     omega2 = newtong*ptmass / xi**3
                      vphi = 0.
                      do k = cg%lhn(zdim, LO), cg%lhn(zdim, HI)
                         zk = cg%z(k)
-                        cg%u(fl%idn,i,j,k) = dens_prof(i)
-                        if (fl%tag == DST) cg%u(fl%idn,i,j,k) = eps * cg%u(fl%idn,i,j,k)
+
+                        if (stratification) then
+                           H2 = 2.0 * cg%cs_iso2(i, j, k) / omega2
+                           cg%u(fl%idn,i,j,k) = max(dens_prof(i) * exp(-zk**2 / H2), smalld)
+                        else
+                           cg%u(fl%idn,i,j,k) = dens_prof(i)
+                        endif
+                        if (fl%tag == DST) cg%u(fl%idn, i, j, k) = eps * cg%u(fl%idn, i, j, k)
 
                         vr   = 0.0
                         ! that condition is not necessary since cs2 == 0.0 for dust
                         if (fl%tag /= DST) then
-                           vphi = sqrt( max(cg%x(i)*(fl%cs2*ln_dens_der(i) + abs(grav(i))),0.0) )
+                           vphi = sqrt( max(cg%x(i)*(cg%cs_iso2(i,j,k)*ln_dens_der(i) + abs(grav(i))),0.0) )
                         else
                            vphi = sqrt( max(abs(grav(i)) * rc, 0.0))
                         endif
@@ -410,19 +432,22 @@ contains
                         cg%u(fl%imy,i,j,k) = vphi * cg%u(fl%idn,i,j,k)
                         cg%u(fl%imz,i,j,k) = vz   * cg%u(fl%idn,i,j,k)
                         if (fl%ien > 0) then
-                           cg%u(fl%ien,i,j,k) = fl%cs2/(fl%gam_1)*cg%u(fl%idn,i,j,k)
-                           cg%u(fl%ien,i,j,k) = cg%u(fl%ien,i,j,k) + 0.5*(vr**2+vphi**2+vz**2)*cg%u(fl%idn,i,j,k)
+                           cg%u(fl%ien,i,j,k) = cg%cs_iso2(i,j,k) / (fl%gam_1) * cg%u(fl%idn,i,j,k)
+                           cg%u(fl%ien,i,j,k) = cg%u(fl%ien,i,j,k) + 0.5*(vr ** 2 + vphi ** 2 + vz ** 2)*cg%u(fl%idn,i,j,k)
                         endif
                      enddo
                   enddo
                enddo
-
             enddo
             cg%w(wna%ind(inid_n))%arr(:,:,:,:) = cg%u(:,:,:,:)
             cg%b(:,:,:,:) = 0.0
             if (allocated(grav)) deallocate(grav)
             if (allocated(dens_prof)) deallocate(dens_prof)
             if (allocated(ln_dens_der)) deallocate(ln_dens_der)
+            if (master) then
+               write(msg,*) " T_inner = ", T_inner
+               call printinfo(msg)
+            endif
          else
             call die("[initproblem:problem_initial_conditions] I don't know what to do... :/")
          endif
@@ -434,14 +459,26 @@ contains
 
    end subroutine problem_initial_conditions
 !-----------------------------------------------------------------------------------------------------------------------
-   real function mmsn_T(r)
+   elemental function mmsn_T(r)
       implicit none
       real, intent(in) :: r         ! [AU]
       real, parameter  :: T_0 = 150 ! [K]
       real, parameter  :: k   = 0.429
+      real :: mmsn_T
 
       mmsn_T = T_0 * r**(-k)
    end function mmsn_T
+!-----------------------------------------------------------------------------------------------------------------------
+   elemental function mmsn_D(r)
+      use units, only: gram, cm
+      implicit none
+      real, intent(in) :: r         ! [AU]
+      real, parameter  :: D_0 = 1.93e-11
+      real, parameter  :: k   = -3.4537
+      real :: mmsn_D
+
+      mmsn_D = D_0 * (0.1 * r)**k  * gram / cm**3
+   end function mmsn_D
 !-----------------------------------------------------------------------------------------------------------------------
    subroutine kepler_problem_post_restart
 
@@ -665,7 +702,8 @@ contains
 
             do i = cg%lhn(xdim, LO), cg%lhn(xdim, HI)
                do k = cg%lhn(zdim, LO), cg%lhn(zdim, HI)
-                  r2 = cg%x(i)**2! + cg%z(k)**2
+                  r2 = cg%x(i)**2
+                  if (stratification) r2 = r2 + cg%z(k)**2
                   cg%gp(i,:,k) = -newtong*ptmass / sqrt(r2)
                enddo
             enddo
