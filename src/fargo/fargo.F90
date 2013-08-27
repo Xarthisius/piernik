@@ -264,6 +264,7 @@ contains
       use cg_leaves,        only: leaves
       use cg_list,          only: cg_list_element
       use constants,        only: xdim, ydim, LO, HI, pMAX
+      use dataio_pub,       only: die
       use domain,           only: dom
       use fluidindex,       only: flind
       use fluidtypes,       only: component_fluid
@@ -290,6 +291,8 @@ contains
       enddo
       call piernik_MPI_Allreduce(max_nshift, pMAX)
 
+      if (max_nshift > (dom%n_d(ydim) / dom%nb)) &
+         & call die("[fargo:int_shift] FARGO tried to shift by far too many cells. Something went terrible wrong elsewhere", 1)
       do iter = 1, max(ceiling(float(max_nshift) / float(int(dom%nb))), 1)
          cgl => leaves%first
          do while (associated(cgl))
