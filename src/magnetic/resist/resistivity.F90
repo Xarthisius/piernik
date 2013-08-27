@@ -322,7 +322,7 @@ contains
 
    subroutine timestep_resist(cg)
 
-      use constants, only: big, pMIN
+      use constants, only: big, pMIN, zero
       use grid_cont, only: grid_container
       use mpisetup,  only: piernik_MPI_Allreduce
 
@@ -330,7 +330,7 @@ contains
 
       type(grid_container), pointer, intent(in) :: cg
 
-      if (etamax%val /= 0.) then
+      if (etamax%val > zero) then
          dt_resist = cfl_resist * cg%dxmn**2 / (2. * etamax%val)
 #ifndef ISO
          dt_resist = min(dt_resist,dt_eint)
