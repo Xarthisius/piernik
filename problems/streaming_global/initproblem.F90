@@ -55,7 +55,7 @@ module initproblem
    !! \f$\tau\f$ in \f$\frac{Du}{Dt} = - \frac{u-u_0}{\tau}f(R)
    !! when initproblem::problem_customize_solution is used
    !<
-   real                     :: dumping_coeff, amp_noise
+   real                     :: dumping_coeff, amp_noise, R_divine, gradient_threshold
    logical                  :: use_inner_orbital_period  !< use 1./T_inner as dumping_coeff
    integer(kind=4)          :: amp_func  !< 1 - random, 2 - sine
 
@@ -64,7 +64,7 @@ module initproblem
    character(len=dsetnamelen), parameter :: inid_n = "u_0"
 
    namelist /PROBLEM_CONTROL/  d0, r_in, r_out, f_in, f_out, dens_exp, eps, dumping_coeff, use_inner_orbital_period, &
-      & amp_noise, amp_func, gauss
+      & amp_noise, amp_func, gauss, R_divine, gradient_threshold
 
 contains
 !-----------------------------------------------------------------------------------------------------------------------
@@ -127,6 +127,8 @@ contains
       eps              = 1.0
 
       dumping_coeff    = 1.0
+      R_divine         = 12.0
+      gradient_threshold = 1e-4
 
       use_inner_orbital_period = .false.
 
@@ -162,6 +164,8 @@ contains
          rbuff(8) = dumping_coeff
          rbuff(9) = amp_noise
          rbuff(10:13) = gauss
+         rbuff(14) = R_divine
+         rbuff(15) = gradient_threshold
 
       endif
 
@@ -185,6 +189,8 @@ contains
          dumping_coeff    = rbuff(8)
          amp_noise        = rbuff(9)
          gauss            = rbuff(10:13)
+         R_divine         = rbuff(14)
+         gradient_threshold = rbuff(15)
 
       endif
 
@@ -605,9 +611,11 @@ contains
       implicit none
 
       logical, intent(in)                     :: forward
-      integer                                 :: i, j, k
+      integer                                 :: i, j, k, ind
       logical, save                           :: frun = .true.
       real, dimension(:,:), allocatable, save :: funcR
+      real, dimension(:), allocatable         :: dprof
+      real, dimension(:,:,:), allocatable     :: vel
       type(cg_list_element), pointer          :: cgl
       type(grid_container),  pointer          :: cg
 
@@ -637,6 +645,35 @@ contains
                cg%u(:,:,j,k) = cg%u(:,:,j,k) - dt*(cg%u(:,:,j,k) - cg%w(wna%ind(inid_n))%arr(:,:,j,k))*funcR(:,:)
             enddo
          enddo
+
+         ! R_divine, gradient_threshold
+
+         if (cg%x(cg%is) >= R_divine) then
+            allocate(dprof(cg%is:cg%ie))
+
+            do i = cg%is, cg%ie
+               dprof(i) = sum(cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke)) / size(cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke))
+            enddo
+            dprof(cg%is:cg%ie-1) = (dprof(cg%is+1:cg%ie) - dprof(cg%is:cg%ie-1)) / cg%dl(xdim)   ! gradient rho
+            dprof(cg%ie) = dprof(cg%ie-1)
+
+            ind = minval([(i, i=cg%is, cg%ie)], mask=(dprof > gradient_threshold))   ! index of the last radius before density raises quicker than gradient_threshold
+
+            if (ind < cg%ie) then
+               allocate(vel(flind%dst%imx:flind%dst%imz, cg%js:cg%je, cg%ks:cg%ke))
+               do i = ind, cg%ie
+                  do j = flind%dst%imx, flind%dst%imz
+                     vel(j, :, :) = cg%u(j, i, cg%js:cg%je, cg%ks:cg%ke) / cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke)
+                  enddo
+                  cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke) = min(cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke), dprof(ind))
+                  do j = flind%dst%imx, flind%dst%imz
+                     cg%u(j, i, cg%js:cg%je, cg%ks:cg%ke) = vel(j, :, :) * cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke)
+                  enddo
+               enddo
+               deallocate(vel)
+            endif
+            deallocate(dprof)
+         endif
 
          cgl => cgl%nxt
       enddo
