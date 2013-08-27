@@ -614,8 +614,6 @@ contains
       integer                                 :: i, j, k, ind
       logical, save                           :: frun = .true.
       real, dimension(:,:), allocatable, save :: funcR
-      real, dimension(:), allocatable         :: dprof
-      real, dimension(:,:,:), allocatable     :: vel
       type(cg_list_element), pointer          :: cgl
       type(grid_container),  pointer          :: cg
       real :: mean_vx
@@ -646,41 +644,6 @@ contains
                cg%u(:,:,j,k) = cg%u(:,:,j,k) - dt*(cg%u(:,:,j,k) - cg%w(wna%ind(inid_n))%arr(:,:,j,k))*funcR(:,:)
             enddo
          enddo
-
-         ! R_divine, gradient_threshold
-
-         if (cg%x(cg%is) >= R_divine) then
-            allocate(dprof(cg%is:cg%ie))
-
-            do i = cg%is, cg%ie
-               dprof(i) = sum(cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke)) / size(cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke))
-            enddo
-            dprof(cg%is:cg%ie-1) = (dprof(cg%is+1:cg%ie) - dprof(cg%is:cg%ie-1)) / cg%dl(xdim)   ! gradient rho
-            dprof(cg%ie) = dprof(cg%ie-1)
-
-            ind = minval([(i, i=cg%is, cg%ie)], mask=(dprof > gradient_threshold))   ! index of the last radius before density raises quicker than gradient_threshold
-
-            if (ind < cg%ie) then
-               allocate(vel(flind%dst%imx:flind%dst%imz, cg%js:cg%je, cg%ks:cg%ke))
-               do i = ind, cg%ie
-                  do j = flind%dst%imx, flind%dst%imz
-                     vel(j, :, :) = cg%u(j, i, cg%js:cg%je, cg%ks:cg%ke) / cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke)
-                  enddo
-                  cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke) = min(cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke), dprof(ind))
-                  do j = flind%dst%imx, flind%dst%imz
-                     cg%u(j, i, cg%js:cg%je, cg%ks:cg%ke) = vel(j, :, :) * cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke)
-                  enddo
-               enddo
-               deallocate(vel)
-            endif
-            deallocate(dprof)
-            mean_vx = sum(cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) / cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) &
-               & / size(cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke))
-            where (cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) < 10.0 * smalld)
-               cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = max(mean_vx * cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke), &
-                  & cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) ! we assume that dust has negative velocity
-            endwhere
-         endif
 
          cgl => cgl%nxt
       enddo
