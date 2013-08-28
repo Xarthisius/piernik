@@ -618,6 +618,7 @@ contains
       real, dimension(:,:,:), allocatable     :: vel
       type(cg_list_element), pointer          :: cgl
       type(grid_container),  pointer          :: cg
+      real :: mean_vx
 
       if (is_multicg) call die("[initproblem:problem_customize_solution_kepler] multiple grid pieces per procesor not implemented yet") !nontrivial
 
@@ -673,6 +674,12 @@ contains
                deallocate(vel)
             endif
             deallocate(dprof)
+            mean_vx = sum(cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) / cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) &
+               & / size(cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke))
+            where (cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) < 10.0 * smalld)
+               cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = max(mean_vx * cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke), &
+                  & cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) ! we assume that dust has negative velocity
+            endwhere
          endif
 
          cgl => cgl%nxt
