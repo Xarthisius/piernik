@@ -674,6 +674,12 @@ contains
                deallocate(vel)
             endif
             deallocate(dprof)
+            mean_vx = sum(cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) / cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) &
+               & / size(cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke))
+            where (cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) < 10.0 * smalld)
+               cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = max(mean_vx * cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke), &
+                  & cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) ! we assume that dust has negative velocity
+            endwhere
          endif
 
          cgl => cgl%nxt
