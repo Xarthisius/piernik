@@ -25,7 +25,7 @@ endif
 
 # galera+
 ifeq ($(QCG_HOST), galera.task.gda.pl)
-   F90FLAGS += -I${HDF5_DIR}/include
+   F90FLAGS += -I${HDF5_DIR}/include -I/usr/include
    LDFLAGS  += -L${HDF5_DIR}/lib
 endif
 
