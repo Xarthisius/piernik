@@ -3,12 +3,48 @@ USE_GNUCPP = yes
 
 ### gcc-4.7
 F90       = mpif90
-F90FLAGS  = -fdefault-real-8 -ffree-form -std=gnu -fimplicit-none -ffree-line-length-none
+F90FLAGS  = -fdefault-real-8 -ffree-form -std=gnu -fimplicit-none -ffree-line-length-none -g
 LDFLAGS   = -Wl,--as-needed -Wl,-O1
 
 ifeq ($(PIERNIK_DEBUG), 1)
-   F90FLAGS += -g -ggdb -O0 -ffpe-trap=zero,overflow,invalid -fcheck=all -fno-omit-frame-pointer
+   F90FLAGS += -ggdb -O0 -ffpe-trap=zero,overflow,invalid -fcheck=all -fno-omit-frame-pointer
    F90FLAGS += -Wall -W -Wextra -pedantic-errors
 else
-   F90FLAGS += -O2 -fstack-arrays -funroll-loops
+   F90FLAGS += -O2 -fstack-arrays
+endif
+
+# Following will work only if you load proper modules
+# If you are in plggpiernik group you can do it by:
+#   module load piernik-deps/1.0
+
+# inula
+ifeq ($(QCG_HOST), inula.man.poznan.pl)
+   F90FLAGS += -I${hdf5_root}/include
+   LDFLAGS  += -L${hdf5_root}/lib
+endif
+
+# galera+
+ifeq ($(QCG_HOST), galera.task.gda.pl)
+   F90FLAGS += -I${HDF5_DIR}/include
+   LDFLAGS  += -L${HDF5_DIR}/lib
+endif
+
+# nova
+ifeq ($(QCG_HOST), nova.wcss.wroc.pl)
+   F90FLAGS += -I${HDF5_DIR}/include
+   LDFLAGS += -L${HDF5_DIR}/lib
+endif
+
+# zeus
+ifeq ($(QCG_HOST), zeus.cyfronet.pl)
+   # NOT TESTED
+   F90FLAGS += -I${HDF5}/include -I${FFTW}/include
+   LDFLAGS += -L${HDF5}/lib -L${FFTW}/lib
+endif
+
+# hydra
+ifeq ($(QCG_HOST), hydra.icm.edu.pl)
+   # NOT WORKING
+   F90FLAGS += -I${HDF5}/include -I${FFTW}/include
+   LDFLAGS += -L${HDF5}/lib -L${FFTW}/lib
 endif
