@@ -447,8 +447,10 @@ def setup_piernik(data=None):
         m.write("LIBS += -lpgplot\n")
     if("SHEAR" in our_defs or "MULTIGRID" in our_defs):
         m.write("LIBS += $(shell pkg-config --libs fftw3)\n")
+        m.write("F90FLAGS += $(shell pkg-config --cflags fftw3)\n")
     if("POISSON_FFT" in our_defs):
         m.write("LIBS += $(shell pkg-config --libs fftw3 lapack)\n")
+        m.write("F90FLAGS += $(shell pkg-config --cflags fftw3 lapack)\n")
     if("PIERNIK_OPENCL" in our_defs):
         m.write("LIBS += $(shell pkg-config --libs fortrancl)\n")
         m.write("F90FLAGS += $(shell pkg-config --cflags fortrancl)\n")
