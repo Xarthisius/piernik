@@ -310,6 +310,35 @@ contains
 
    end subroutine add_random_noise
 !-----------------------------------------------------------------------------------------------------------------------
+   elemental function mmsn_d(x) result(y)
+      use units,              only: gram, cm
+      implicit none
+      real, intent(in) :: x
+      real             :: y
+      y = d0 * x ** (-dens_exp) * gram / cm**2
+   end function mmsn_d
+!-----------------------------------------------------------------------------------------------------------------------
+   elemental function mmsn_cut(x, x0) result (y)
+      implicit none
+      real, intent(in) :: x, x0
+      real             :: y
+      y = max(mmsn_d(x), mmsn_d(x0))
+   end function mmsn_cut
+!-----------------------------------------------------------------------------------------------------------------------
+   elemental function smooth(x, x0) result (y)
+      implicit none
+      real, intent(in) :: x, x0
+      real             :: y
+      y = tanh(x - x0) * 0.5 + 0.5
+   end function smooth
+!-----------------------------------------------------------------------------------------------------------------------
+   elemental function mmsn_smooth(x, x0) result (y)
+      implicit none
+      real, intent(in) :: x, x0
+      real             :: y
+      y = (1.0 - smooth(x, x0)) * mmsn_d(x) + smooth(x, x0) * mmsn_cut(x, x0)
+   end function mmsn_smooth
+!-----------------------------------------------------------------------------------------------------------------------
    subroutine problem_initial_conditions
 
       use cg_leaves,          only: leaves
@@ -327,7 +356,7 @@ contains
 
       implicit none
 
-      integer                         :: i, j, k, kmid, p
+      integer                         :: i, j, k, kmid, p, ind
       real                            :: xi, yj, zk, rc, vz, sqr_gm, vr, vphi
       real                            :: gprim, H2
 
@@ -381,7 +410,15 @@ contains
                if (.not.allocated(dens_prof)) allocate(dens_prof(xl:xr))
 
                grav = compute_gravaccelR(cg)
-               dens_prof(:) = d0 * cg%x(:)**(-dens_exp)  * gram / cm**2
+               ! ---
+               dens_prof(:) = mmsn_smooth(cg%x(:), R_divine)
+               ln_dens_der  = log(dens_prof)
+               ln_dens_der(xl+1:xr)  = ( ln_dens_der(xl+1:xr) - ln_dens_der(xl:xr-1) ) / cg%dl(xdim)
+               ln_dens_der(xl)       = ln_dens_der(xl+1)
+               ind = minval([(i, i=cg%is, cg%ie)], mask=(ln_dens_der > 0.0))   ! index of the last radius before density raises
+               if (ind < cg%ie .and. cg%x(ind) >= R_divine) &
+                  & dens_prof(ind-1:) = min(dens_prof(ind-1), dens_prof(ind-1:))
+               ! --- 
 
                !! \f$ v_\phi = \sqrt{R\left(c_s^2 \partial_R \ln\rho + \partial_R \Phi \right)} \f$
                ln_dens_der  = log(dens_prof)
@@ -618,7 +655,7 @@ contains
       real, dimension(:,:,:), allocatable     :: vel
       type(cg_list_element), pointer          :: cgl
       type(grid_container),  pointer          :: cg
-      real :: mean_vx
+      real :: mean_vx, mean_vy
 
       if (is_multicg) call die("[initproblem:problem_customize_solution_kepler] multiple grid pieces per procesor not implemented yet") !nontrivial
 
@@ -649,7 +686,8 @@ contains
 
          ! R_divine, gradient_threshold
 
-         if (cg%x(cg%is) >= R_divine) then
+         !if (cg%x(cg%is) >= R_divine) then
+         if (.false.) then
             allocate(dprof(cg%is:cg%ie))
 
             do i = cg%is, cg%ie
@@ -674,13 +712,17 @@ contains
                deallocate(vel)
             endif
             deallocate(dprof)
-            mean_vx = sum(cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) / cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) &
-               & / size(cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke))
-            where (cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) < 10.0 * smalld)
-               cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = max(mean_vx * cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke), &
-                  & cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) ! we assume that dust has negative velocity
-            endwhere
          endif
+         mean_vx = sum(cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) / cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) &
+            & / size(cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke))
+         mean_vy = sum(cg%u(flind%dst%imy, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) / cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) &
+            & / size(cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke))
+         where (cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) < 10.0 * smalld)
+            cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = max(mean_vx * cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke), &
+                & cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) ! we assume that dust has negative velocity
+            cg%u(flind%dst%imy, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = max(mean_vy * cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke), &
+                & cg%u(flind%dst%imy, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) ! we assume that dust has negative velocity
+         endwhere
 
          cgl => cgl%nxt
       enddo
