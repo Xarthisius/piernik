@@ -415,9 +415,11 @@ contains
                ln_dens_der  = log(dens_prof)
                ln_dens_der(xl+1:xr)  = ( ln_dens_der(xl+1:xr) - ln_dens_der(xl:xr-1) ) / cg%dl(xdim)
                ln_dens_der(xl)       = ln_dens_der(xl+1)
-               ind = minval([(i, i=cg%is, cg%ie)], mask=(ln_dens_der > 0.0))   ! index of the last radius before density raises
-               if (ind < cg%ie .and. cg%x(ind) >= R_divine) &
-                  & dens_prof(ind-1:) = min(dens_prof(ind-1), dens_prof(ind-1:))
+               if (any(ln_dens_der > 0.0)) then
+                  ind = minval([(i, i=cg%is, cg%ie)], mask=(ln_dens_der > 0.0))   ! index of the last radius before density raises
+                  if (ind < cg%ie .and. cg%x(ind) >= R_divine) &
+                     & dens_prof(ind-1:) = min(dens_prof(ind-1), dens_prof(ind-1:))
+               endif
                ! --- 
 
                !! \f$ v_\phi = \sqrt{R\left(c_s^2 \partial_R \ln\rho + \partial_R \Phi \right)} \f$
