@@ -712,8 +712,9 @@ contains
          if (cg%x(cg%ie) >= R_divine) then
             do i = cg%is, cg%ie
                if (cg%x(i) < R_divine) cycle
-               do ivar = flind%dst%idn, flind%dst%imz
-                  temp_mean(i, ivar) = temp_mean(i, ivar) + sum(cg%u(ivar, i, cg%js:cg%je, cg%ks:cg%ke))
+               temp_mean(i, flind%dst%idn) = temp_mean(i, flind%dst%idn) + sum(cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke))
+               do ivar = flind%dst%imx, flind%dst%imz
+                  temp_mean(i, ivar) = temp_mean(i, ivar) + sum(cg%u(ivar, i, cg%js:cg%je, cg%ks:cg%ke) / cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke))
                enddo
             enddo
          endif
@@ -728,8 +729,9 @@ contains
          if (cg%x(cg%ie) >= R_divine) then
             do i = cg%is, cg%ie
                if (cg%x(i) < R_divine) cycle
-               do ivar = flind%dst%idn, flind%dst%imz
-                  cg%u(ivar, i, cg%js:cg%je, cg%ks:cg%ke) = temp_mean(i, ivar)
+               cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke) = temp_mean(i, flind%dst%idn)
+               do ivar = flind%dst%imx, flind%dst%imz
+                  cg%u(ivar, i, cg%js:cg%je, cg%ks:cg%ke) = temp_mean(i, ivar) * temp_mean(i, flind%dst%idn)
                enddo
             enddo
          endif
