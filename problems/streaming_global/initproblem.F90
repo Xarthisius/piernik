@@ -63,6 +63,8 @@ module initproblem
    real, dimension(ngauss)  :: gauss
    character(len=dsetnamelen), parameter :: inid_n = "u_0"
 
+   real, dimension(:,:), allocatable      :: temp_mean
+
    namelist /PROBLEM_CONTROL/  d0, r_in, r_out, f_in, f_out, dens_exp, eps, dumping_coeff, use_inner_orbital_period, &
       & amp_noise, amp_func, gauss, R_divine, gradient_threshold
 
@@ -411,18 +413,19 @@ contains
 
                grav = compute_gravaccelR(cg)
                ! ---
-               dens_prof(:) = mmsn_smooth(cg%x(:), R_divine)
-               ln_dens_der  = log(dens_prof)
-               ln_dens_der(xl+1:xr)  = ( ln_dens_der(xl+1:xr) - ln_dens_der(xl:xr-1) ) / cg%dl(xdim)
-               ln_dens_der(xl)       = ln_dens_der(xl+1)
-               if (any(ln_dens_der > 0.0)) then
-                  ind = minval([(i, i=cg%is, cg%ie)], mask=(ln_dens_der > 0.0))   ! index of the last radius before density raises
-                  if (ind < cg%ie .and. cg%x(ind) >= R_divine) &
-                     & dens_prof(ind-1:) = min(dens_prof(ind-1), dens_prof(ind-1:))
-               endif
-               ! --- 
+!               dens_prof(:) = mmsn_smooth(cg%x(:), R_divine)
+!               ln_dens_der  = log(dens_prof)
+!               ln_dens_der(xl+1:xr)  = ( ln_dens_der(xl+1:xr) - ln_dens_der(xl:xr-1) ) / cg%dl(xdim)
+!               ln_dens_der(xl)       = ln_dens_der(xl+1)
+!               if (any(ln_dens_der > 0.0)) then
+!                  ind = minval([(i, i=cg%is, cg%ie)], mask=(ln_dens_der > 0.0))   ! index of the last radius before density raises
+!                  if (ind < cg%ie .and. cg%x(ind) >= R_divine) &
+!                     & dens_prof(ind-1:) = min(dens_prof(ind-1), dens_prof(ind-1:))
+!               endif
+!               ! --- 
 
                !! \f$ v_\phi = \sqrt{R\left(c_s^2 \partial_R \ln\rho + \partial_R \Phi \right)} \f$
+               dens_prof(:) = mmsn_d(cg%x(:))
                ln_dens_der  = log(dens_prof)
                ln_dens_der(xl+1:xr)  = ( ln_dens_der(xl+1:xr) - ln_dens_der(xl:xr-1) ) / cg%dl(xdim)
                ln_dens_der(xl)       = ln_dens_der(xl+1)
@@ -637,9 +640,9 @@ contains
 
       use cg_leaves,        only: leaves
       use cg_list,          only: cg_list_element
-      use constants,        only: xdim, ydim, zdim, LO, HI, pMAX
+      use constants,        only: xdim, ydim, zdim, LO, HI, pSUM, I_ONE
       use dataio_pub,       only: die!, warn, msg
-      use domain,           only: is_multicg
+      use domain,           only: is_multicg, dom
       use global,           only: dt, smalld
       use grid_cont,        only: grid_container
       use all_boundaries,   only: all_fluid_boundaries
@@ -650,7 +653,7 @@ contains
       implicit none
 
       logical, intent(in)                     :: forward
-      integer                                 :: i, j, k, ind
+      integer                                 :: i, j, k, ind, ivar
       logical, save                           :: frun = .true.
       real, dimension(:,:), allocatable, save :: funcR
       real, dimension(:), allocatable         :: dprof
@@ -660,6 +663,8 @@ contains
       real :: mean_vx, mean_vy
 
       if (is_multicg) call die("[initproblem:problem_customize_solution_kepler] multiple grid pieces per procesor not implemented yet") !nontrivial
+
+      if (.not.allocated(temp_mean)) allocate(temp_mean(dom%off(xdim):dom%off(xdim)+dom%n_d(xdim)-I_ONE, flind%dst%idn:flind%dst%imz))
 
       cgl => leaves%first
       do while (associated(cgl))
@@ -686,46 +691,48 @@ contains
             enddo
          enddo
 
-         ! R_divine, gradient_threshold
-
-         !if (cg%x(cg%is) >= R_divine) then
-         if (.false.) then
-            allocate(dprof(cg%is:cg%ie))
-
-            do i = cg%is, cg%ie
-               dprof(i) = sum(cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke)) / size(cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke))
-            enddo
-            dprof(cg%is:cg%ie-1) = (dprof(cg%is+1:cg%ie) - dprof(cg%is:cg%ie-1)) / cg%dl(xdim)   ! gradient rho
-            dprof(cg%ie) = dprof(cg%ie-1)
-
-            ind = minval([(i, i=cg%is, cg%ie)], mask=(dprof > gradient_threshold))   ! index of the last radius before density raises quicker than gradient_threshold
-
-            if (ind < cg%ie) then
-               allocate(vel(flind%dst%imx:flind%dst%imz, cg%js:cg%je, cg%ks:cg%ke))
-               do i = ind, cg%ie
-                  do j = flind%dst%imx, flind%dst%imz
-                     vel(j, :, :) = cg%u(j, i, cg%js:cg%je, cg%ks:cg%ke) / cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke)
-                  enddo
-                  cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke) = min(cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke), dprof(ind))
-                  do j = flind%dst%imx, flind%dst%imz
-                     cg%u(j, i, cg%js:cg%je, cg%ks:cg%ke) = vel(j, :, :) * cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke)
-                  enddo
-               enddo
-               deallocate(vel)
-            endif
-            deallocate(dprof)
-         endif
          mean_vx = sum(cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) / cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) &
             & / size(cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke))
          mean_vy = sum(cg%u(flind%dst%imy, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) / cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) &
             & / size(cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke))
          where (cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) < 10.0 * smalld)
             cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = max(mean_vx * cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke), &
-                & cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) ! we assume that dust has negative velocity
-            cg%u(flind%dst%imy, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = max(mean_vy * cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke), &
-                & cg%u(flind%dst%imy, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) ! we assume that dust has negative velocity
+                & cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) ! we assume that dust has negative x=velocity
+            cg%u(flind%dst%imy, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = min(mean_vy * cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke), &
+                & cg%u(flind%dst%imy, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) ! we assume that dust has positive y-velocity
          endwhere
 
+         cgl => cgl%nxt
+      enddo
+      
+      temp_mean = 0.0   
+      cgl => leaves%first
+      do while (associated(cgl))
+         cg => cgl%cg
+         if (cg%x(cg%ie) >= R_divine) then
+            do i = cg%is, cg%ie
+               if (cg%x(i) < R_divine) cycle
+               do ivar = flind%dst%idn, flind%dst%imz
+                  temp_mean(i, ivar) = temp_mean(i, ivar) + sum(cg%u(ivar, i, cg%js:cg%je, cg%ks:cg%ke))
+               enddo
+            enddo
+         endif
+         cgl => cgl%nxt
+      enddo
+      call piernik_MPI_Allreduce(temp_mean, pSUM)
+      temp_mean(:, :) = temp_mean(:, :) / (dom%n_d(ydim) * dom%n_d(zdim))
+
+      cgl => leaves%first
+      do while (associated(cgl))
+         cg => cgl%cg
+         if (cg%x(cg%ie) >= R_divine) then
+            do i = cg%is, cg%ie
+               if (cg%x(i) < R_divine) cycle
+               do ivar = flind%dst%idn, flind%dst%imz
+                  cg%u(ivar, i, cg%js:cg%je, cg%ks:cg%ke) = temp_mean(i, ivar)
+               enddo
+            enddo
+         endif
          cgl => cgl%nxt
       enddo
 
