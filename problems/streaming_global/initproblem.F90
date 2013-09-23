@@ -358,7 +358,7 @@ contains
 
       implicit none
 
-      integer                         :: i, j, k, kmid, p, ind
+      integer                         :: i, j, k, kmid, p
       real                            :: xi, yj, zk, rc, vz, sqr_gm, vr, vphi
       real                            :: gprim, H2
 
@@ -653,14 +653,11 @@ contains
       implicit none
 
       logical, intent(in)                     :: forward
-      integer                                 :: i, j, k, ind, ivar
+      integer                                 :: i, j, k, ivar
       logical, save                           :: frun = .true.
       real, dimension(:,:), allocatable, save :: funcR
-      real, dimension(:), allocatable         :: dprof
-      real, dimension(:,:,:), allocatable     :: vel
       type(cg_list_element), pointer          :: cgl
       type(grid_container),  pointer          :: cg
-      real :: mean_vx, mean_vy
 
       if (is_multicg) call die("[initproblem:problem_customize_solution_kepler] multiple grid pieces per procesor not implemented yet") !nontrivial
 
@@ -691,17 +688,6 @@ contains
             enddo
          enddo
 
-         mean_vx = sum(cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) / cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) &
-            & / size(cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke))
-         mean_vy = sum(cg%u(flind%dst%imy, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) / cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) &
-            & / size(cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke))
-         where (cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) < 10.0 * smalld)
-            cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = max(mean_vx * cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke), &
-                & cg%u(flind%dst%imx, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) ! we assume that dust has negative x=velocity
-            cg%u(flind%dst%imy, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke) = min(mean_vy * cg%u(flind%dst%idn, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke), &
-                & cg%u(flind%dst%imy, cg%is:cg%ie, cg%js:cg%je, cg%ks:cg%ke)) ! we assume that dust has positive y-velocity
-         endwhere
-
          cgl => cgl%nxt
       enddo
       
@@ -709,15 +695,12 @@ contains
       cgl => leaves%first
       do while (associated(cgl))
          cg => cgl%cg
-         if (cg%x(cg%ie) >= R_divine) then
-            do i = cg%is, cg%ie
-               if (cg%x(i) < R_divine) cycle
-               temp_mean(i, flind%dst%idn) = temp_mean(i, flind%dst%idn) + sum(cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke))
-               do ivar = flind%dst%imx, flind%dst%imz
-                  temp_mean(i, ivar) = temp_mean(i, ivar) + sum(cg%u(ivar, i, cg%js:cg%je, cg%ks:cg%ke) / cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke))
-               enddo
+         do i = cg%is, cg%ie
+            temp_mean(i, flind%dst%idn) = temp_mean(i, flind%dst%idn) + sum(cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke))
+            do ivar = flind%dst%imx, flind%dst%imz
+               temp_mean(i, ivar) = temp_mean(i, ivar) + sum(cg%u(ivar, i, cg%js:cg%je, cg%ks:cg%ke) / cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke))
             enddo
-         endif
+         enddo
          cgl => cgl%nxt
       enddo
       call piernik_MPI_Allreduce(temp_mean, pSUM)
@@ -729,12 +712,18 @@ contains
          if (cg%x(cg%ie) >= R_divine) then
             do i = cg%is, cg%ie
                if (cg%x(i) < R_divine) cycle
-               cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke) = temp_mean(i, flind%dst%idn)
+               cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke) = min(temp_mean(i, flind%dst%idn), 1.5 * cg%w(wna%ind(inid_n))%arr(flind%dst%idn, i, cg%js, cg%ks))
                do ivar = flind%dst%imx, flind%dst%imz
-                  cg%u(ivar, i, cg%js:cg%je, cg%ks:cg%ke) = temp_mean(i, ivar) * temp_mean(i, flind%dst%idn)
+                  cg%u(ivar, i, cg%js:cg%je, cg%ks:cg%ke) = cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke) * temp_mean(i, ivar)
                enddo
             enddo
          endif
+         do i = cg%is, cg%ie
+            where (cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke) < 10.0 * smalld)
+               cg%u(flind%dst%imx, i, cg%js:cg%je, cg%ks:cg%ke) = temp_mean(i, flind%dst%imx) * cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke)
+               cg%u(flind%dst%imy, i, cg%js:cg%je, cg%ks:cg%ke) = temp_mean(i, flind%dst%imy) * cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke)
+            endwhere
+         enddo
          cgl => cgl%nxt
       enddo
 
