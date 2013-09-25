@@ -368,7 +368,7 @@ contains
       type(cg_list_element),  pointer :: cgl
       type(grid_container),   pointer :: cg
 
-      integer :: xl, xr
+      integer :: xl, xr, ind
       logical, save :: first_run = .true.
 
 !   Secondary parameters
