@@ -55,8 +55,9 @@ module initproblem
    !! \f$\tau\f$ in \f$\frac{Du}{Dt} = - \frac{u-u_0}{\tau}f(R)
    !! when initproblem::problem_customize_solution is used
    !<
-   real                     :: dumping_coeff, amp_noise, R_divine, gradient_threshold
+   real                     :: dumping_coeff, amp_noise, R_divine
    logical                  :: use_inner_orbital_period  !< use 1./T_inner as dumping_coeff
+   logical                  :: R_div_smoothing           !< perform azimuthal smoothing for R > R_divine
    integer(kind=4)          :: amp_func  !< 1 - random, 2 - sine
 
    integer(kind=4), parameter :: ngauss = 4
@@ -66,7 +67,7 @@ module initproblem
    real, dimension(:,:), allocatable      :: temp_mean
 
    namelist /PROBLEM_CONTROL/  d0, r_in, r_out, f_in, f_out, dens_exp, eps, dumping_coeff, use_inner_orbital_period, &
-      & amp_noise, amp_func, gauss, R_divine, gradient_threshold
+      & amp_noise, amp_func, gauss, R_divine, R_div_smoothing
 
 contains
 !-----------------------------------------------------------------------------------------------------------------------
@@ -130,9 +131,9 @@ contains
 
       dumping_coeff    = 1.0
       R_divine         = 12.0
-      gradient_threshold = 1e-4
 
       use_inner_orbital_period = .false.
+      R_div_smoothing  = .false.
 
       if (master) then
 
@@ -141,7 +142,7 @@ contains
          write(nh%lun,nml=PROBLEM_CONTROL)
          close(nh%lun)
          open(newunit=nh%lun, file=nh%par_file)
-         nh%errstr=""
+         nh%errstr=''
          read(unit=nh%lun, nml=PROBLEM_CONTROL, iostat=nh%ierrh, iomsg=nh%errstr)
          close(nh%lun)
          call nh%namelist_errh(nh%ierrh, "PROBLEM_CONTROL")
@@ -155,6 +156,7 @@ contains
          ibuff(1) = amp_func
 
          lbuff(1) = use_inner_orbital_period
+         lbuff(2) = R_div_smoothing
 
          rbuff(1) = d0
          rbuff(2) = r_in
@@ -167,7 +169,6 @@ contains
          rbuff(9) = amp_noise
          rbuff(10:13) = gauss
          rbuff(14) = R_divine
-         rbuff(15) = gradient_threshold
 
       endif
 
@@ -180,6 +181,7 @@ contains
          amp_func         = ibuff(1)
 
          use_inner_orbital_period = lbuff(1)
+         R_div_smoothing          = lbuff(2)
 
          d0               = rbuff(1)
          r_in             = rbuff(2)
@@ -192,7 +194,6 @@ contains
          amp_noise        = rbuff(9)
          gauss            = rbuff(10:13)
          R_divine         = rbuff(14)
-         gradient_threshold = rbuff(15)
 
       endif
 
@@ -413,19 +414,19 @@ contains
 
                grav = compute_gravaccelR(cg)
                ! ---
-!               dens_prof(:) = mmsn_smooth(cg%x(:), R_divine)
-!               ln_dens_der  = log(dens_prof)
-!               ln_dens_der(xl+1:xr)  = ( ln_dens_der(xl+1:xr) - ln_dens_der(xl:xr-1) ) / cg%dl(xdim)
-!               ln_dens_der(xl)       = ln_dens_der(xl+1)
-!               if (any(ln_dens_der > 0.0)) then
-!                  ind = minval([(i, i=cg%is, cg%ie)], mask=(ln_dens_der > 0.0))   ! index of the last radius before density raises
-!                  if (ind < cg%ie .and. cg%x(ind) >= R_divine) &
-!                     & dens_prof(ind-1:) = min(dens_prof(ind-1), dens_prof(ind-1:))
-!               endif
-!               ! --- 
+               dens_prof(:) = mmsn_smooth(cg%x(:), R_divine)
+               ln_dens_der  = log(dens_prof)
+               ln_dens_der(xl+1:xr)  = ( ln_dens_der(xl+1:xr) - ln_dens_der(xl:xr-1) ) / cg%dl(xdim)
+               ln_dens_der(xl)       = ln_dens_der(xl+1)
+               if (any(ln_dens_der > 0.0)) then
+                  ind = minval([(i, i=cg%is, cg%ie)], mask=(ln_dens_der > 0.0))   ! index of the last radius before density raises
+                  if (ind < cg%ie .and. cg%x(ind) >= R_divine) &
+                     & dens_prof(ind-1:) = min(dens_prof(ind-1), dens_prof(ind-1:))
+               endif
+               ! --- 
 
                !! \f$ v_\phi = \sqrt{R\left(c_s^2 \partial_R \ln\rho + \partial_R \Phi \right)} \f$
-               dens_prof(:) = mmsn_d(cg%x(:))
+!               dens_prof(:) = mmsn_d(cg%x(:))
                ln_dens_der  = log(dens_prof)
                ln_dens_der(xl+1:xr)  = ( ln_dens_der(xl+1:xr) - ln_dens_der(xl:xr-1) ) / cg%dl(xdim)
                ln_dens_der(xl)       = ln_dens_der(xl+1)
@@ -709,7 +710,7 @@ contains
       cgl => leaves%first
       do while (associated(cgl))
          cg => cgl%cg
-         if (cg%x(cg%ie) >= R_divine) then
+         if (cg%x(cg%ie) >= R_divine .and. R_div_smoothing) then
             do i = cg%is, cg%ie
                if (cg%x(i) < R_divine) cycle
                cg%u(flind%dst%idn, i, cg%js:cg%je, cg%ks:cg%ke) = min(temp_mean(i, flind%dst%idn), 1.5 * cg%w(wna%ind(inid_n))%arr(flind%dst%idn, i, cg%js, cg%ks))
