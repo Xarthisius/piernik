@@ -420,6 +420,7 @@ contains
                ln_dens_der(xl)       = ln_dens_der(xl+1)
                if (any(ln_dens_der > 0.0)) then
                   ind = minval([(i, i=cg%is, cg%ie)], mask=(ln_dens_der > 0.0))   ! index of the last radius before density raises
+                  ind = max(min(cg%ie, ind), cg%is)  ! sanitize ind for Intel compiler
                   if (ind < cg%ie .and. cg%x(ind) >= R_divine) &
                      & dens_prof(ind-1:) = min(dens_prof(ind-1), dens_prof(ind-1:))
                endif
@@ -520,6 +521,7 @@ contains
 
                      grav(xl+1:xr-1) = half*(cg%gpot(xl:xr-2, j, k) - cg%gpot(xl+2:xr, j, k)) / cg%dl(xdim)
                      grav(xl) = grav(xl + 1)
+                     grav(xr) = grav(xr - 1)
                      dens_prof(:) = cg%u(fl%idn, :, j, k)
 
                      !! \f$ v_\phi = \sqrt{R\left(c_s^2 \partial_R \ln\rho + \partial_R \Phi \right)} \f$
