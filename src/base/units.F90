@@ -212,6 +212,17 @@ contains
             lmtvB    = [1.0, 1.0, 1.0, 1.0, 1.0]
             s_lmtvB  = ["au     ", "Mjup   ", "yr     ", "au / yr", "gauss  "]
 
+         case ("BIN", "bin")
+            ! BIN  uses: length --> AU,     mass --> Msun,        time --> yr,         miu0 --> 4*pi,    temperature --> kelvin
+            cm         = 1.0/au_cm            !< centimetre, length unit
+            sek        = 1.0/yr_s             !< second, time unit
+            gram       = 1.0/msun_g           !< gram, mass unit
+            s_len_u  = ' [AU]'
+            s_time_u = ' [yr]'
+            s_mass_u = ' [M_sun]'
+            lmtvB    = [1.0, 1.0, 1.0, 1.0, 1.0]
+            s_lmtvB  = ["au     ", "Msun   ", "yr     ", "au / yr", "gauss  "]
+
          case ("KSG", "ksg")
             ! KSG  uses: length --> kpc,    mass --> 10^6*Msun,   time --> Gyr,        miu0 --> 4*pi,    temperature --> kelvin
             cm         = 1.0/(1.0e3*pc_cm)    !< centimetre, length unit
