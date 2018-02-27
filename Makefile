@@ -16,8 +16,12 @@
 #   'make allsetup'        # creates object directories for all valid problems,
 #                            but does not compile them
 #   'make ctags'           # recreate ctags for {src,problems}
-#   'make dep [P=problem]  # create and show dependency graph
+#   'make dep [P=problem]' # create and show dependency graph
 #                            $P defaults to mcrwind
+#   'make qa'              # run qa.py on all F90 files in src and problems
+#                            directories
+#   'make pep8'            # run pep8 on all Python scripts, ignore long lines
+#   'make doxy'            # generate/updare Doxygen documentation
 #
 # Resetup will also call make for the object directories, unless you've
 # specified --nocompile either in your .setuprc* files or it was stored in
@@ -31,7 +35,7 @@ ALLOBJ = $(wildcard obj*)
 
 ECHO ?= /bin/echo
 
-.PHONY: $(ALLOBJ) check dep
+.PHONY: $(ALLOBJ) check dep qa pep8 doxy
 
 all: $(ALLOBJ)
 
@@ -60,21 +64,26 @@ clean:
 	@CL=1 $(MAKE) -k all
 
 allsetup:
-	for i in {,../}problems/* ; do \
+	for i in problems/* ; do \
 		if [ ! -e $$i/OBSOLETE ] ; then \
 			if [ $$( dirname $$( dirname $$i ) ) == "." ] ; then \
 				nm=$$( basename $$i ); \
 			else \
 				nm="../"$$i; \
 			fi; \
-			./setup $$nm -o "A_"$$( basename $$i ) --nocompile && sed -i 's/ --nocompile//' "obj_A_"$$( basename $$i )"/"{.setup.call,Makefile,env.dat,version.F90} & \
+			./setup $$nm -o "A_"$$( basename $$i ) --nocompile && sed -i 's/ --nocompile//' "obj_A_"$$( basename $$i )"/"{.setup.call,Makefile,env.dat,version.F90}; \
 		fi; \
 	done
 
-check:
-	TMPDIR=$$(mktemp -d /dev/shm/test_XXXXXX);\
-	bitten-slave -d . --build-dir $$TMPDIR -k bitten/trunk.mcrtest.xml ;\
-	rm -rf $$TMPDIR
+qa: pep8
+	./bin/qa.py $$( find src problems -name "*.F90" )
+
+pep8:
+	echo PEP8 check
+	pep8 `find . -name "*py"` --ignore=E501
+
+doxy:
+	doxygen piernik.doxy
 
 ifndef P
 P = "mcrwind"

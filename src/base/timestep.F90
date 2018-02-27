@@ -69,6 +69,7 @@ contains
 
       if (code_progress < PIERNIK_INIT_GLOBAL) call die("[timestep:init_time_step] globals not initialized.")
 
+      c_all_old = 0. ! safe initial value
       select case (cflcontrol)
          case ('warn')
             cfl_manager => cfl_warn
@@ -126,8 +127,8 @@ contains
 
       implicit none
 
-      real,              intent(inout) :: dt !< the timestep
-      type(var_numbers), intent(in)    :: flind
+      real,              intent(inout) :: dt    !< the timestep
+      type(var_numbers), intent(in)    :: flind !< the structure with all fluid indices
 
       type(cg_list_element), pointer   :: cgl
       type(grid_container),  pointer   :: cg
@@ -333,7 +334,7 @@ contains
       integer                :: i, j, k, d
       type(cg_level_connected_T), pointer :: curl
 
-      curl => find_level(cg%level_id)
+      curl => find_level(cg%l%id)
 
       c_fl = small
       dt_proc(:) = huge(1.)
